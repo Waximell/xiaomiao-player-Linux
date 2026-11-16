@@ -18,7 +18,6 @@ enum _LayerGestureKind { horizontal, verticalLeft, verticalRight, zoom }
 /// - **单指滑动**：位移超过阈值后延迟 80ms 再确认方向（垂直/水平），
 ///   给第二根手指留出加入时间，双指捏合不再误触发滑动；
 ///   垂直按起始横坐标分左右（左=亮度、右=音量）；
-///   顶部/底部 8% 为垂直手势死区、右侧 8% 为水平手势死区
 ///   （避免与全面屏系统手势冲突，参考 kt 项目）；
 /// - **双指**：缩放 + 平移画面（[onZoomStart]/[onZoomUpdate]/[onZoomEnd]），
 ///   若滑动中途加入第二指，先回调 [onSwipeCancel] 供页面撤销 seek。
@@ -98,14 +97,11 @@ class PlayerGestureLayer extends StatefulWidget {
 
 class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
   static const double _kDragSlop = 20;
-  static const double _kVerticalDeadZoneRatio = 0.08;
-  static const double _kHorizontalDeadZoneRatio = 0.08;
 
   /// 方向分类延迟：单指位移超阈值后等待一小段时间再确认方向，
   /// 给第二根手指留出加入时间（双指捏合前单指微动不再误判为滑动）
   static const Duration _kClassifyDelay = Duration(milliseconds: 80);
 
-  /// 首个按下位置（用于方向判定与死区检查）
   Offset? _downPosition;
   final Set<int> _activePointers = {};
   _LayerGestureKind? _kind;
@@ -197,7 +193,6 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
     }
   }
 
-  /// 延迟确认单指滑动方向（含死区检查）。
   /// 水平滑动把延迟期间的位移并入起始位移，保证 seek 目标不丢位移。
   void _confirmDirection() {
     _classifyTimer = null;
@@ -208,20 +203,9 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
     final dx = (current.dx - down.dx).abs();
     final dy = (current.dy - down.dy).abs();
     if (dy > dx && dy > _kDragSlop) {
-      // 顶部/底部死区：全面屏手势（下拉通知栏/上滑手势）不处理
-      if (down.dy < _height * _kVerticalDeadZoneRatio ||
-          down.dy > _height * (1 - _kVerticalDeadZoneRatio)) {
-        return;
-      }
-      _kind = down.dx < _width / 2
-          ? _LayerGestureKind.verticalLeft
-          : _LayerGestureKind.verticalRight;
+      _kind = _LayerGestureKind.verticalRight;
       widget.onSwipeStart();
     } else if (dx > dy && dx > _kDragSlop) {
-      // 右侧死区：系统返回手势，不处理
-      if (down.dx > _width * (1 - _kHorizontalDeadZoneRatio)) {
-        return;
-      }
       _kind = _LayerGestureKind.horizontal;
       // 延迟期间的水平位移并入起始位移，seek 从按下位置算起
       _gestureDx = current.dx - down.dx;

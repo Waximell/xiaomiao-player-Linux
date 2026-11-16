@@ -19,6 +19,7 @@ import 'package:moumou/services/super_resolution_service.dart';
 import 'package:moumou/utils/audio_shuffle.dart';
 import 'package:moumou/utils/formatters.dart';
 import 'package:moumou/utils/network_playlist.dart';
+import 'package:moumou/utils/player_orientation.dart';
 import 'package:moumou/widgets/raw_thumb_image.dart';
 
 /// 听视频界面（工作.md 第 10 点 + 阶段1 第 2 点重设计，参考小喵 KT 项目 AudioPlayerScreen）：
@@ -204,7 +205,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
     _currentIndex = _videos.isEmpty ? 0 : index.clamp(0, _videos.length - 1);
 
     // 竖屏 + 沉浸式全屏（状态栏/导航栏隐藏）
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    PlayerOrientation.apply([DeviceOrientation.portraitUp]);
     _enterFullscreen();
 
     _loadCover();

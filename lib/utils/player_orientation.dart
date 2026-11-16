@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:moumou/models/player_action.dart';
 
@@ -30,8 +33,16 @@ class PlayerOrientation {
   /// 恢复 App 默认方向策略：退出播放 / 销毁播放页时调用。
   ///
   /// 不 await（退出路径要立刻 pop，方向与保存进度并行；调用方用 `unawaited`）。
-  static Future<void> restoreAppDefault() =>
-      SystemChrome.setPreferredOrientations(appDefault);
+  /// Linux port: 桌面无「锁定屏幕方向」概念，全部 no-op。
+  /// 旋转由 compositor + iio-sensor-proxy 完成，App 只响应窗口宽高交换。
+  static bool get _isLinux => !kIsWeb && Platform.isLinux;
+
+  static Future<void> apply(List<DeviceOrientation> orientations) =>
+      _isLinux
+          ? Future<void>.value()
+          : SystemChrome.setPreferredOrientations(orientations);
+
+  static Future<void> restoreAppDefault() => apply(appDefault);
 }
 
 /// 由「编码宽高 + 旋转角」判断**显示方向**是否为竖屏；尺寸未知返回 null。

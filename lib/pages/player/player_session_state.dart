@@ -25,6 +25,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -58,7 +59,13 @@ class PlayerSessionState extends ChangeNotifier {
     Future<void> Function(String name, String value)? setMpvProperty,
   })  : _player = player,
         _settings = settings ?? PlayerControlsSettings.instance,
-        _setSystemVolume = setSystemVolume ?? DeviceServices.setSystemVolume,
+        // Linux port: 没有 Android 系统音量通道，直接写 mpv volume。
+        _setSystemVolume = setSystemVolume ??
+            (Platform.isLinux
+                ? (v) async {
+                    await player?.setVolume(v);
+                  }
+                : DeviceServices.setSystemVolume),
         _setWindowBrightness =
             setWindowBrightness ?? DeviceServices.setWindowBrightness,
         _setMpvVolume =
@@ -255,7 +262,7 @@ class PlayerSessionState extends ChangeNotifier {
     double viewportHeight,
   ) {
     if (viewportHeight <= 0) return null;
-    if (isLeftHalf) return _brightnessSwipe(dyDelta, viewportHeight);
+    // Linux port: 全屏任意位置上下滑都是音量，不再分左右半屏/亮度。
     return _volumeSwipe(dyDelta, viewportHeight);
   }
 

@@ -72,4 +72,8 @@ app.*.map.json
 /AGENTS.md
 
 # 本机编译脚本（写死了本机绝对路径：flutter SDK / adb / 项目路径，对他人无用，不提交）
-/tools/
+# Linux 移植例外：下面两个脚本与路径无关，且 CI 生成 linux/ 后要靠它打 GTK 补丁，
+# 必须随仓库分发，因此只忽略 tools/ 里的其余文件。
+/tools/*
+!/tools/patch-linux-runner.sh
+!/tools/disable-impeller.sh

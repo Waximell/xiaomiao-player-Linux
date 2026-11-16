@@ -38,7 +38,8 @@ dependencies:
   # 本地播放器
   media_kit: ^1.1.11
   media_kit_video: ^1.2.5
-  media_kit_libs_video: ^1.0.5
+  # Linux 专用：不拉 Android/Windows/macOS 原生内核
+  media_kit_libs_linux: ^1.2.1
   permission_handler: ^11.3.1
   shared_preferences: ^2.3.2
   # 超分着色器：拷贝 assets 到应用目录 + 拼接绝对路径
@@ -97,22 +98,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
 
-dependency_overrides:
-  # media_kit 换为本地魔改版：新增 libassAndroidFontsDir 字段，支持 Android
-  # 运行时用户字体目录（libass 在 mpv_initialize 前注入 sub-fonts-dir）。
-  # 基线版本 1.2.6；补丁清单与升级步骤见 third_party/media_kit/FORK.md（升级前必读）。
-  media_kit:
-    path: third_party/media_kit
-  # Android 视频内核换为自建版本（内含 mk_thumbnail_* 快速缩略图接口）。
-  # 内核构建：https://github.com/azxcvn/libmpv-android-video-build（mk-thumbnail 分支）
-  # 其余平台不受影响，仍走 pub 上游的 media_kit 系列。
-  media_kit_libs_android_video:
-    path: third_party/media_kit_libs_android_video
-
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
 
   # 多语言：每次构建/生成时由 gen_l10n 读 l10n.yaml 生成 AppLocalizations
@@ -125,13 +110,11 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/shaders/
     - assets/icons/
     - assets/icon/
     # https 播放所需的 CA 证书库：自编 libmpv 静态链接 mbedTLS，而 ffmpeg 的
     # mbedTLS 后端没有默认证书库路径 → 必须由 App 用 mpv `tls-ca-file` 指过去，
     # 否则所有 https 都在证书校验阶段失败（详见 lib/services/tls_ca_bundle.dart）
-    - assets/certs/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

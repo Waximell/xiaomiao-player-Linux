@@ -35,10 +35,10 @@ const bool kBuildSupportsMediaCodecVulkan = false;
 
 /// *直通优先* 链（对应「硬解+」）：`mediacodec` 直通 → `mediacodec-copy` 拷贝 →
 /// 软解。末位 `no` = 允许软解兜底；mpv 自己会在这条链里逐档往下试。
-const String kHwdecChainDirectFirst = 'mediacodec,mediacodec-copy,no';
+const String kHwdecChainDirectFirst = 'vaapi,vaapi-copy,no';
 
 /// *拷贝优先* 链：跳过直通，直接 `mediacodec-copy` → 软解。
-const String kHwdecChainCopyFirst = 'mediacodec-copy,no';
+const String kHwdecChainCopyFirst = 'vaapi-copy,no';
 
 /// Vulkan 后端下是否还能直通（对齐 MPVRX `canUseDirectMediaCodec`）。
 bool canUseDirectMediaCodec({

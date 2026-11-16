@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=小喵 Player
+Name[en]=Xiaomiao Player
+Comment=Linux 移植版播放器 (VA-API 硬解)
+Exec=/usr/bin/xiaomiao-player %f
+Icon=xiaomiao-player
+Terminal=false
+Categories=AudioVideo;Video;Player;
+MimeType=video/mp4;video/x-matroska;video/x-msvideo;video/webm;video/mpeg;video/quicktime;
+StartupNotify=true

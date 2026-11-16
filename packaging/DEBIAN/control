@@ -1,0 +1,15 @@
+Package: xiaomiao-player
+Version: @VERSION@
+Section: video
+Priority: optional
+Architecture: amd64
+Maintainer: Waximell <noreply@example.com>
+Depends: libgtk-3-0, libglib2.0-0, libepoxy0, libmpv1 | libmpv2, libsecret-1-0, libstdc++6, libx11-6, libwayland-client0
+Recommends: intel-media-va-driver, vainfo, ca-certificates
+Homepage: https://github.com/Waximell/xiaomiao-player-Linux
+Description: 小喵 Player (Linux x64, 精简移植)
+ 基于 media_kit 与系统 libmpv 的 Flutter 播放器 Linux 移植。
+ 保留 SMB / 哔哩哔哩在线播放、弹幕字幕、手势与横竖屏切换；
+ 移除 Android 原生能力、下载、超分、截图与应用内更新。
+ 硬解链 hwdec=vaapi,vaapi-copy,no（优先 VA-API 直通）。
+ 完整对应源码：https://github.com/Waximell/xiaomiao-player-Linux

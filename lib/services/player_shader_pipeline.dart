@@ -9,7 +9,6 @@
 /// 两边会各自重新 apply。
 library;
 
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
@@ -66,28 +65,15 @@ class PlayerShaderPipeline {
     return next;
   }
 
+  /// Linux port: 超分与后处理全部砍掉。
+  /// 无论两套服务登记了什么，都只清空 `glsl-shaders`，
+  /// 保证 VA-API 直通不被 shader 链干扰。
   Future<void> _apply(Player player) async {
     try {
       final native = player.platform as NativePlayer;
-      final chain = composeShaderChain(_anime, _post);
-      if (chain.isEmpty) {
-        await native.command(const [
-          'change-list',
-          'glsl-shaders',
-          'clr',
-          '',
-        ]);
-        return;
-      }
-      await native.command([
-        'change-list',
-        'glsl-shaders',
-        'set',
-        chain.join(Platform.isWindows ? ';' : ':'),
-      ]);
+      await native.command(const ['change-list', 'glsl-shaders', 'clr', '']);
     } catch (e) {
-      // 播放器未就绪 / 渲染器不支持：静默失败，不打断播放
-      debugPrint('PlayerShaderPipeline: 应用着色器链失败: $e');
+      debugPrint('PlayerShaderPipeline: 清空着色器链失败: $e');
     }
   }
 

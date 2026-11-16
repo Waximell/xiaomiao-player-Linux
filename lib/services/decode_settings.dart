@@ -11,8 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [decodeModeDescription]；**顺序即持久化语义**（按 hwdec 字符串存），不许调整。
 enum DecodeMode {
   autoSafe('auto-safe'),
-  hwCopy('mediacodec-copy'),
-  hwPlus('mediacodec,mediacodec-copy,no'),
+  hwCopy('vaapi-copy'),
+  hwPlus('vaapi,vaapi-copy,no'),
   sw('no');
 
   final String hwdec;
@@ -82,13 +82,15 @@ class DecodeSettings extends ChangeNotifier {
   bool _gpuNext = false;
 
   /// 是否启用 gpu-next 渲染（vo=gpu-next）。默认关闭，仍走 vo=gpu。
-  bool get gpuNext => _gpuNext;
+  // Linux port: gpu-next 已砍，恒关（避免 Android 渲染 workaround 触发）
+  bool get gpuNext => false;
 
   bool _vulkan = false;
 
   /// 是否在 gpu-next 下启用 Vulkan 后端（gpu-api=vulkan）。
   /// 仅在 [gpuNext] 开启时生效；默认关闭（gpu-next 走 OpenGL）。
-  bool get useVulkan => _vulkan;
+  // Linux port: Vulkan 已砍，恒关
+  bool get useVulkan => false;
 
   /// 从磁盘加载
   Future<void> load() async {

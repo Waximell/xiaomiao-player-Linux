@@ -1,0 +1,31 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: xiaomiao-player
+Upstream-Contact: azxcvn <https://github.com/azxcvn/xiaomiao-player>
+Source: https://github.com/Waximell/xiaomiao-player-Linux
+
+Files: *
+Copyright: 2026 azxcvn and contributors
+           2026 Waximell (Linux port)
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ .
+ On Debian systems, the full text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.
+ .
+ 完整对应源码即本包构建时的 commit，见上面的 Source 链接与
+ 本仓库对应的 Release / Actions 运行记录。
+
+Files: third_party/*
+Copyright: 见 THIRD_PARTY_NOTICES.md
+License: 见 THIRD_PARTY_NOTICES.md
+
+Files: assets/*
+Copyright: 见 THIRD_PARTY_NOTICES.md
+License: 见 THIRD_PARTY_NOTICES.md

@@ -1,0 +1,487 @@
+# Linux port patch — 基于 azxcvn/xiaomiao-player @ 6fb52cd (1.3.9+7)
+# 用法：在同步上游后 git apply --3way patches/linux.patch
+# 仅包含 lib/ 与 pubspec.yaml 的改动；新增文件见 linux/ packaging/ tools/ .github/
+
+diff --git a/lib/pages/player/audio_player_page.dart b/lib/pages/player/audio_player_page.dart
+index 3d3bf66..f37b9a2 100755
+--- a/lib/pages/player/audio_player_page.dart
++++ b/lib/pages/player/audio_player_page.dart
+@@ -19,6 +19,7 @@ import 'package:moumou/services/super_resolution_service.dart';
+ import 'package:moumou/utils/audio_shuffle.dart';
+ import 'package:moumou/utils/formatters.dart';
+ import 'package:moumou/utils/network_playlist.dart';
++import 'package:moumou/utils/player_orientation.dart';
+ import 'package:moumou/widgets/raw_thumb_image.dart';
+ 
+ /// 听视频界面（工作.md 第 10 点 + 阶段1 第 2 点重设计，参考小喵 KT 项目 AudioPlayerScreen）：
+@@ -204,7 +205,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> {
+     _currentIndex = _videos.isEmpty ? 0 : index.clamp(0, _videos.length - 1);
+ 
+     // 竖屏 + 沉浸式全屏（状态栏/导航栏隐藏）
+-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
++    PlayerOrientation.apply([DeviceOrientation.portraitUp]);
+     _enterFullscreen();
+ 
+     _loadCover();
+diff --git a/lib/pages/player/player_page.dart b/lib/pages/player/player_page.dart
+index dd84478..43a755d 100755
+--- a/lib/pages/player/player_page.dart
++++ b/lib/pages/player/player_page.dart
+@@ -1208,10 +1208,10 @@ class _PlayerPageState extends State<PlayerPage>
+   Future<void> _applyInitialOrientation() async {
+     if (_followPhoneRotation ||
+         _settings.videoOrientation != VideoOrientationMode.auto) {
+-      await SystemChrome.setPreferredOrientations(_initialOrientations());
++      await PlayerOrientation.apply(_initialOrientations());
+       return;
+     }
+-    await SystemChrome.setPreferredOrientations(_currentWindowOrientations());
++    await PlayerOrientation.apply(_currentWindowOrientations());
+     if (_disposed || !mounted || _exiting) return;
+     final probe = await DeviceServices.probeVideoOrientation(_path);
+     if (_disposed || !mounted || _exiting) return;
+@@ -1225,7 +1225,7 @@ class _PlayerPageState extends State<PlayerPage>
+       rotation: probe?.rotation ?? 0,
+     );
+     _initialPortraitLocked = portrait ?? false;
+-    await SystemChrome.setPreferredOrientations(
++    await PlayerOrientation.apply(
+       _initialPortraitLocked
+           ? PlayerOrientation.portrait
+           : PlayerOrientation.landscape,
+@@ -1286,7 +1286,7 @@ class _PlayerPageState extends State<PlayerPage>
+     final follow = _shouldFollowPhoneOrientation;
+     if (follow == _followPhoneRotation) return;
+     _followPhoneRotation = follow;
+-    await SystemChrome.setPreferredOrientations(
++    await PlayerOrientation.apply(
+       follow ? PlayerOrientation.appDefault : PlayerOrientation.landscape,
+     );
+     if (_disposed || !mounted || _exiting) return;
+@@ -1330,7 +1330,7 @@ class _PlayerPageState extends State<PlayerPage>
+       // 已在竖屏页（用户手动切过）或已开始退出时不再自动 push
+       if (!mounted || _portraitActive || _exiting || _disposed) return;
+       // 先切方向再进竖屏页，避免先横屏闪一下再旋转
+-      await SystemChrome.setPreferredOrientations(PlayerOrientation.portrait);
++      await PlayerOrientation.apply(PlayerOrientation.portrait);
+       await _openPortraitPlayer();
+     } on AssertionError {
+       // 播放器已被销毁（快速退出）：静默返回
+@@ -1348,7 +1348,7 @@ class _PlayerPageState extends State<PlayerPage>
+     if (_settings.videoOrientation != VideoOrientationMode.auto) return;
+     if (!mounted || _disposed || _exiting) return;
+     if (_portraitActive || _audioActive.value) return;
+-    await SystemChrome.setPreferredOrientations(PlayerOrientation.landscape);
++    await PlayerOrientation.apply(PlayerOrientation.landscape);
+   }
+ 
+   /// 判断当前视频是否为竖屏，**结合旋转元数据**（工作.md 第 5 点，参考小喵 KT：
+@@ -3166,10 +3166,10 @@ class _PlayerPageState extends State<PlayerPage>
+     //   不再跟随（用户明确要了这个方向，不该被重力立刻转回去），按原来的
+     //   方式恢复横屏。
+     if (_followPhoneRotation && !_windowIsPortrait) {
+-      SystemChrome.setPreferredOrientations(PlayerOrientation.appDefault);
++      PlayerOrientation.apply(PlayerOrientation.appDefault);
+     } else {
+       _followPhoneRotation = false;
+-      SystemChrome.setPreferredOrientations(PlayerOrientation.landscape);
++      PlayerOrientation.apply(PlayerOrientation.landscape);
+     }
+     _enterFullscreen();
+     _resetHideTimer();
+@@ -3233,7 +3233,7 @@ class _PlayerPageState extends State<PlayerPage>
+     _hideTimer?.cancel();
+     _audioActive.value = true;
+     if (mounted) setState(() {});
+-    await SystemChrome.setPreferredOrientations(PlayerOrientation.portrait);
++    await PlayerOrientation.apply(PlayerOrientation.portrait);
+     if (!mounted) return; // 防异步间隙后使用过期 context
+     await Navigator.of(context).push(
+       PageRouteBuilder(
+@@ -3286,7 +3286,7 @@ class _PlayerPageState extends State<PlayerPage>
+     } else {
+       final lockPortrait =
+           _settings.videoOrientation == VideoOrientationMode.portrait;
+-      await SystemChrome.setPreferredOrientations(
++      await PlayerOrientation.apply(
+         lockPortrait ? PlayerOrientation.portrait : PlayerOrientation.landscape,
+       );
+     }
+diff --git a/lib/pages/player/player_portrait_page.dart b/lib/pages/player/player_portrait_page.dart
+index db8fd60..4dac5d9 100755
+--- a/lib/pages/player/player_portrait_page.dart
++++ b/lib/pages/player/player_portrait_page.dart
+@@ -597,7 +597,7 @@ class _PlayerPortraitPageState extends State<PlayerPortraitPage>
+     // 竖屏 + 沉浸式全屏（状态栏/导航栏隐藏）。
+     // 跟随手机方向进来的：**不锁竖屏**，方向仍交还系统——窗口转回横屏时本页
+     // 自己 pop（见 didChangeMetrics），锁住就再也回不去横屏了
+-    SystemChrome.setPreferredOrientations(
++    PlayerOrientation.apply(
+       widget.followPhoneRotation
+           ? PlayerOrientation.appDefault
+           : PlayerOrientation.portrait,
+diff --git a/lib/pages/player/player_session_state.dart b/lib/pages/player/player_session_state.dart
+index 333341e..006e1ab 100755
+--- a/lib/pages/player/player_session_state.dart
++++ b/lib/pages/player/player_session_state.dart
+@@ -25,6 +25,7 @@
+ library;
+ 
+ import 'dart:async';
++import 'dart:io' show Platform;
+ 
+ import 'package:flutter/foundation.dart';
+ import 'package:flutter/widgets.dart';
+@@ -58,7 +59,13 @@ class PlayerSessionState extends ChangeNotifier {
+     Future<void> Function(String name, String value)? setMpvProperty,
+   })  : _player = player,
+         _settings = settings ?? PlayerControlsSettings.instance,
+-        _setSystemVolume = setSystemVolume ?? DeviceServices.setSystemVolume,
++        // Linux port: 没有 Android 系统音量通道，直接写 mpv volume。
++        _setSystemVolume = setSystemVolume ??
++            (Platform.isLinux
++                ? (v) async {
++                    await player?.setVolume(v);
++                  }
++                : DeviceServices.setSystemVolume),
+         _setWindowBrightness =
+             setWindowBrightness ?? DeviceServices.setWindowBrightness,
+         _setMpvVolume =
+@@ -255,7 +262,7 @@ class PlayerSessionState extends ChangeNotifier {
+     double viewportHeight,
+   ) {
+     if (viewportHeight <= 0) return null;
+-    if (isLeftHalf) return _brightnessSwipe(dyDelta, viewportHeight);
++    // Linux port: 全屏任意位置上下滑都是音量，不再分左右半屏/亮度。
+     return _volumeSwipe(dyDelta, viewportHeight);
+   }
+ 
+diff --git a/lib/pages/player/views/player_gesture_layer.dart b/lib/pages/player/views/player_gesture_layer.dart
+index 8cdcf3c..d526159 100755
+--- a/lib/pages/player/views/player_gesture_layer.dart
++++ b/lib/pages/player/views/player_gesture_layer.dart
+@@ -18,7 +18,6 @@ enum _LayerGestureKind { horizontal, verticalLeft, verticalRight, zoom }
+ /// - **单指滑动**：位移超过阈值后延迟 80ms 再确认方向（垂直/水平），
+ ///   给第二根手指留出加入时间，双指捏合不再误触发滑动；
+ ///   垂直按起始横坐标分左右（左=亮度、右=音量）；
+-///   顶部/底部 8% 为垂直手势死区、右侧 8% 为水平手势死区
+ ///   （避免与全面屏系统手势冲突，参考 kt 项目）；
+ /// - **双指**：缩放 + 平移画面（[onZoomStart]/[onZoomUpdate]/[onZoomEnd]），
+ ///   若滑动中途加入第二指，先回调 [onSwipeCancel] 供页面撤销 seek。
+@@ -98,14 +97,11 @@ class PlayerGestureLayer extends StatefulWidget {
+ 
+ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
+   static const double _kDragSlop = 20;
+-  static const double _kVerticalDeadZoneRatio = 0.08;
+-  static const double _kHorizontalDeadZoneRatio = 0.08;
+ 
+   /// 方向分类延迟：单指位移超阈值后等待一小段时间再确认方向，
+   /// 给第二根手指留出加入时间（双指捏合前单指微动不再误判为滑动）
+   static const Duration _kClassifyDelay = Duration(milliseconds: 80);
+ 
+-  /// 首个按下位置（用于方向判定与死区检查）
+   Offset? _downPosition;
+   final Set<int> _activePointers = {};
+   _LayerGestureKind? _kind;
+@@ -197,7 +193,6 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
+     }
+   }
+ 
+-  /// 延迟确认单指滑动方向（含死区检查）。
+   /// 水平滑动把延迟期间的位移并入起始位移，保证 seek 目标不丢位移。
+   void _confirmDirection() {
+     _classifyTimer = null;
+@@ -208,20 +203,9 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
+     final dx = (current.dx - down.dx).abs();
+     final dy = (current.dy - down.dy).abs();
+     if (dy > dx && dy > _kDragSlop) {
+-      // 顶部/底部死区：全面屏手势（下拉通知栏/上滑手势）不处理
+-      if (down.dy < _height * _kVerticalDeadZoneRatio ||
+-          down.dy > _height * (1 - _kVerticalDeadZoneRatio)) {
+-        return;
+-      }
+-      _kind = down.dx < _width / 2
+-          ? _LayerGestureKind.verticalLeft
+-          : _LayerGestureKind.verticalRight;
++      _kind = _LayerGestureKind.verticalRight;
+       widget.onSwipeStart();
+     } else if (dx > dy && dx > _kDragSlop) {
+-      // 右侧死区：系统返回手势，不处理
+-      if (down.dx > _width * (1 - _kHorizontalDeadZoneRatio)) {
+-        return;
+-      }
+       _kind = _LayerGestureKind.horizontal;
+       // 延迟期间的水平位移并入起始位移，seek 从按下位置算起
+       _gestureDx = current.dx - down.dx;
+diff --git a/lib/services/decode_settings.dart b/lib/services/decode_settings.dart
+index 008defa..2e5293a 100755
+--- a/lib/services/decode_settings.dart
++++ b/lib/services/decode_settings.dart
+@@ -11,8 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
+ /// [decodeModeDescription]；**顺序即持久化语义**（按 hwdec 字符串存），不许调整。
+ enum DecodeMode {
+   autoSafe('auto-safe'),
+-  hwCopy('mediacodec-copy'),
+-  hwPlus('mediacodec,mediacodec-copy,no'),
++  hwCopy('vaapi-copy'),
++  hwPlus('vaapi,vaapi-copy,no'),
+   sw('no');
+ 
+   final String hwdec;
+@@ -82,13 +82,15 @@ class DecodeSettings extends ChangeNotifier {
+   bool _gpuNext = false;
+ 
+   /// 是否启用 gpu-next 渲染（vo=gpu-next）。默认关闭，仍走 vo=gpu。
+-  bool get gpuNext => _gpuNext;
++  // Linux port: gpu-next 已砍，恒关（避免 Android 渲染 workaround 触发）
++  bool get gpuNext => false;
+ 
+   bool _vulkan = false;
+ 
+   /// 是否在 gpu-next 下启用 Vulkan 后端（gpu-api=vulkan）。
+   /// 仅在 [gpuNext] 开启时生效；默认关闭（gpu-next 走 OpenGL）。
+-  bool get useVulkan => _vulkan;
++  // Linux port: Vulkan 已砍，恒关
++  bool get useVulkan => false;
+ 
+   /// 从磁盘加载
+   Future<void> load() async {
+diff --git a/lib/services/player_shader_pipeline.dart b/lib/services/player_shader_pipeline.dart
+index c0efa30..523fbbd 100755
+--- a/lib/services/player_shader_pipeline.dart
++++ b/lib/services/player_shader_pipeline.dart
+@@ -9,7 +9,6 @@
+ /// 两边会各自重新 apply。
+ library;
+ 
+-import 'dart:io';
+ 
+ import 'package:flutter/foundation.dart';
+ import 'package:media_kit/media_kit.dart';
+@@ -66,28 +65,15 @@ class PlayerShaderPipeline {
+     return next;
+   }
+ 
++  /// Linux port: 超分与后处理全部砍掉。
++  /// 无论两套服务登记了什么，都只清空 `glsl-shaders`，
++  /// 保证 VA-API 直通不被 shader 链干扰。
+   Future<void> _apply(Player player) async {
+     try {
+       final native = player.platform as NativePlayer;
+-      final chain = composeShaderChain(_anime, _post);
+-      if (chain.isEmpty) {
+-        await native.command(const [
+-          'change-list',
+-          'glsl-shaders',
+-          'clr',
+-          '',
+-        ]);
+-        return;
+-      }
+-      await native.command([
+-        'change-list',
+-        'glsl-shaders',
+-        'set',
+-        chain.join(Platform.isWindows ? ';' : ':'),
+-      ]);
++      await native.command(const ['change-list', 'glsl-shaders', 'clr', '']);
+     } catch (e) {
+-      // 播放器未就绪 / 渲染器不支持：静默失败，不打断播放
+-      debugPrint('PlayerShaderPipeline: 应用着色器链失败: $e');
++      debugPrint('PlayerShaderPipeline: 清空着色器链失败: $e');
+     }
+   }
+ 
+diff --git a/lib/services/tls_ca_bundle.dart b/lib/services/tls_ca_bundle.dart
+index 3e95ec0..0b18758 100755
+--- a/lib/services/tls_ca_bundle.dart
++++ b/lib/services/tls_ca_bundle.dart
+@@ -1,83 +1,13 @@
+-import 'dart:io';
+-
+-import 'package:flutter/foundation.dart';
+-import 'package:flutter/services.dart';
+-import 'package:path/path.dart' as p;
+-import 'package:path_provider/path_provider.dart';
+-
+-/// https 播放所需的 CA 证书库（把 assets 里的证书库拷到沙盒，供 mpv 使用）。
+-///
+-/// **为什么必须这么做**（2026-10 实测定位）：
+-/// 本项目的自编 `libmpv.so` 静态链接的是 **mbedTLS**，而 ffmpeg 的 mbedTLS 后端
+-/// **没有默认证书库路径**——OpenSSL 会去读系统证书库，mbedTLS 不会，必须由调用方
+-/// 显式给 `ca_file`。实测 `libmpv.so` 里 `mbedtls_x509_crt_parse_file` 与
+-/// `ca_file` / `tls-ca-file` 都在，但 `/etc/ssl/certs/ca-certificates.crt`、
+-/// `cacert.pem` 这类默认路径**一个都没有**。
+-///
+-/// 后果：**所有 https 源都在证书校验阶段失败**，而 http 完全正常。表现为
+-/// 「在线直链打开后 0 字节、无限转圈」（本地文件不受影响）。B 站与网络存储
+-/// 之所以没暴露这个问题，是因为它们各自走本地回环代理（`bili_stream_proxy` /
+-/// `network_streaming_proxy`），由 Dart 的 BoringSSL 去完成 TLS；**只有
+-/// 「打开链接 / 外部直链」这条路把 URL 直接交给 mpv**。
+-///
+-/// 兜底做法：`assets/certs/cacert.pem`（Mozilla 根证书库）拷到
+-/// `getApplicationSupportDirectory()`，再由 [applyPlaybackTuning] 在 `open` 之前
+-/// 写 mpv 属性 `tls-ca-file`（mpv 会把它转成 ffmpeg 的 `ca_file`）。
+-///
+-/// 拷贝失败一律返回 null（调用方不写该属性）：**宁可维持现状，也不能让调参
+-/// 阻断起播**。证书校验保持开启，不为了让 https 通而关掉校验。
++/// Linux port: 系统 libmpv（OpenSSL / GnuTLS）自动读 /etc/ssl/certs，
++/// 不需要 App 注入一份静态、会过期的 Mozilla 根证书库。
++/// 保留原有 public API，避免调用点与测试断裂。
+ class TlsCaBundle {
+-  /// 随包分发的证书库：Mozilla CA bundle，取自 `https://curl.se/ca/cacert.pem`
+-  /// （2026-10 下载，121 张根证书）。需要更新时重新下载覆盖即可。
++  /// 仅为兼容可能的测试断言保留；Linux 上不再读取该 asset。
+   static const String assetPath = 'assets/certs/cacert.pem';
+-
+-  /// 落盘文件名
+   static const String fileName = 'cacert.pem';
+ 
+-  static String? _cachedPath;
+-  static Future<String?>? _inFlight;
+-
+-  /// 返回沙盒内证书库的绝对路径；不可用（无平台实现 / 资源缺失 / 写盘失败）返回 null。
+-  ///
+-  /// 结果缓存：只会从 assets 拷一次；文件大小与资源一致时也不重复写。
+-  static Future<String?> ensurePath() {
+-    final cached = _cachedPath;
+-    if (cached != null) return Future.value(cached);
+-    final running = _inFlight;
+-    if (running != null) return running;
+-    final future = _copyToSandbox();
+-    _inFlight = future;
+-    return future.whenComplete(() => _inFlight = null);
+-  }
+-
+-  static Future<String?> _copyToSandbox() async {
+-    try {
+-      final support = await getApplicationSupportDirectory();
+-      final file = File(p.join(support.path, fileName));
+-      final data = await rootBundle.load(assetPath);
+-      final bytes =
+-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+-      var needWrite = true;
+-      try {
+-        needWrite = !await file.exists() || await file.length() != bytes.length;
+-      } catch (_) {
+-        needWrite = true;
+-      }
+-      if (needWrite) {
+-        await file.writeAsBytes(bytes, flush: true);
+-      }
+-      _cachedPath = file.path;
+-      return file.path;
+-    } catch (e) {
+-      debugPrint('TlsCaBundle: 准备 CA 证书库失败（https 直链将失败）: $e');
+-      return null;
+-    }
+-  }
++  /// 恒返回 null：buildMpvTuning 会跳过 `tls-ca-file`。
++  static Future<String?> ensurePath() async => null;
+ 
+-  /// 测试用：清掉缓存，重新走一遍解析
+-  @visibleForTesting
+-  static void resetForTest() {
+-    _cachedPath = null;
+-    _inFlight = null;
+-  }
++  static void resetForTest() {}
+ }
+diff --git a/lib/utils/decode_policy.dart b/lib/utils/decode_policy.dart
+index 2a0b00e..004552a 100755
+--- a/lib/utils/decode_policy.dart
++++ b/lib/utils/decode_policy.dart
+@@ -35,10 +35,10 @@ const bool kBuildSupportsMediaCodecVulkan = false;
+ 
+ /// *直通优先* 链（对应「硬解+」）：`mediacodec` 直通 → `mediacodec-copy` 拷贝 →
+ /// 软解。末位 `no` = 允许软解兜底；mpv 自己会在这条链里逐档往下试。
+-const String kHwdecChainDirectFirst = 'mediacodec,mediacodec-copy,no';
++const String kHwdecChainDirectFirst = 'vaapi,vaapi-copy,no';
+ 
+ /// *拷贝优先* 链：跳过直通，直接 `mediacodec-copy` → 软解。
+-const String kHwdecChainCopyFirst = 'mediacodec-copy,no';
++const String kHwdecChainCopyFirst = 'vaapi-copy,no';
+ 
+ /// Vulkan 后端下是否还能直通（对齐 MPVRX `canUseDirectMediaCodec`）。
+ bool canUseDirectMediaCodec({
+diff --git a/lib/utils/player_orientation.dart b/lib/utils/player_orientation.dart
+index 296eb3c..a4f1a8e 100755
+--- a/lib/utils/player_orientation.dart
++++ b/lib/utils/player_orientation.dart
+@@ -1,3 +1,6 @@
++import 'dart:io' show Platform;
++
++import 'package:flutter/foundation.dart' show kIsWeb;
+ import 'package:flutter/services.dart';
+ import 'package:moumou/models/player_action.dart';
+ 
+@@ -30,8 +33,16 @@ class PlayerOrientation {
+   /// 恢复 App 默认方向策略：退出播放 / 销毁播放页时调用。
+   ///
+   /// 不 await（退出路径要立刻 pop，方向与保存进度并行；调用方用 `unawaited`）。
+-  static Future<void> restoreAppDefault() =>
+-      SystemChrome.setPreferredOrientations(appDefault);
++  /// Linux port: 桌面无「锁定屏幕方向」概念，全部 no-op。
++  /// 旋转由 compositor + iio-sensor-proxy 完成，App 只响应窗口宽高交换。
++  static bool get _isLinux => !kIsWeb && Platform.isLinux;
++
++  static Future<void> apply(List<DeviceOrientation> orientations) =>
++      _isLinux
++          ? Future<void>.value()
++          : SystemChrome.setPreferredOrientations(orientations);
++
++  static Future<void> restoreAppDefault() => apply(appDefault);
+ }
+ 
+ /// 由「编码宽高 + 旋转角」判断**显示方向**是否为竖屏；尺寸未知返回 null。
+diff --git a/pubspec.yaml b/pubspec.yaml
+index eabfe91..02a22b9 100755
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -38,7 +38,8 @@ dependencies:
+   # 本地播放器
+   media_kit: ^1.1.11
+   media_kit_video: ^1.2.5
+-  media_kit_libs_video: ^1.0.5
++  # Linux 专用：不拉 Android/Windows/macOS 原生内核
++  media_kit_libs_linux: ^1.2.1
+   permission_handler: ^11.3.1
+   shared_preferences: ^2.3.2
+   # 超分着色器：拷贝 assets 到应用目录 + 拼接绝对路径
+@@ -97,22 +98,6 @@ dev_dependencies:
+   flutter_lints: ^6.0.0
+   flutter_launcher_icons: ^0.14.4
+ 
+-dependency_overrides:
+-  # media_kit 换为本地魔改版：新增 libassAndroidFontsDir 字段，支持 Android
+-  # 运行时用户字体目录（libass 在 mpv_initialize 前注入 sub-fonts-dir）。
+-  # 基线版本 1.2.6；补丁清单与升级步骤见 third_party/media_kit/FORK.md（升级前必读）。
+-  media_kit:
+-    path: third_party/media_kit
+-  # Android 视频内核换为自建版本（内含 mk_thumbnail_* 快速缩略图接口）。
+-  # 内核构建：https://github.com/azxcvn/libmpv-android-video-build（mk-thumbnail 分支）
+-  # 其余平台不受影响，仍走 pub 上游的 media_kit 系列。
+-  media_kit_libs_android_video:
+-    path: third_party/media_kit_libs_android_video
+-
+-# For information on the generic Dart part of this file, see the
+-# following page: https://dart.dev/tools/pub/pubspec
+-
+-# The following section is specific to Flutter packages.
+ flutter:
+ 
+   # 多语言：每次构建/生成时由 gen_l10n 读 l10n.yaml 生成 AppLocalizations
+@@ -125,13 +110,11 @@ flutter:
+ 
+   # To add assets to your application, add an assets section, like this:
+   assets:
+-    - assets/shaders/
+     - assets/icons/
+     - assets/icon/
+     # https 播放所需的 CA 证书库：自编 libmpv 静态链接 mbedTLS，而 ffmpeg 的
+     # mbedTLS 后端没有默认证书库路径 → 必须由 App 用 mpv `tls-ca-file` 指过去，
+     # 否则所有 https 都在证书校验阶段失败（详见 lib/services/tls_ca_bundle.dart）
+-    - assets/certs/
+ 
+   # An image asset can refer to one or more resolution-specific "variants", see
+   # https://flutter.dev/to/resolution-aware-images

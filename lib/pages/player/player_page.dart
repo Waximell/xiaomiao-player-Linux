@@ -1208,10 +1208,10 @@ class _PlayerPageState extends State<PlayerPage>
   Future<void> _applyInitialOrientation() async {
     if (_followPhoneRotation ||
         _settings.videoOrientation != VideoOrientationMode.auto) {
-      await SystemChrome.setPreferredOrientations(_initialOrientations());
+      await PlayerOrientation.apply(_initialOrientations());
       return;
     }
-    await SystemChrome.setPreferredOrientations(_currentWindowOrientations());
+    await PlayerOrientation.apply(_currentWindowOrientations());
     if (_disposed || !mounted || _exiting) return;
     final probe = await DeviceServices.probeVideoOrientation(_path);
     if (_disposed || !mounted || _exiting) return;
@@ -1225,7 +1225,7 @@ class _PlayerPageState extends State<PlayerPage>
       rotation: probe?.rotation ?? 0,
     );
     _initialPortraitLocked = portrait ?? false;
-    await SystemChrome.setPreferredOrientations(
+    await PlayerOrientation.apply(
       _initialPortraitLocked
           ? PlayerOrientation.portrait
           : PlayerOrientation.landscape,
@@ -1286,7 +1286,7 @@ class _PlayerPageState extends State<PlayerPage>
     final follow = _shouldFollowPhoneOrientation;
     if (follow == _followPhoneRotation) return;
     _followPhoneRotation = follow;
-    await SystemChrome.setPreferredOrientations(
+    await PlayerOrientation.apply(
       follow ? PlayerOrientation.appDefault : PlayerOrientation.landscape,
     );
     if (_disposed || !mounted || _exiting) return;
@@ -1330,7 +1330,7 @@ class _PlayerPageState extends State<PlayerPage>
       // 已在竖屏页（用户手动切过）或已开始退出时不再自动 push
       if (!mounted || _portraitActive || _exiting || _disposed) return;
       // 先切方向再进竖屏页，避免先横屏闪一下再旋转
-      await SystemChrome.setPreferredOrientations(PlayerOrientation.portrait);
+      await PlayerOrientation.apply(PlayerOrientation.portrait);
       await _openPortraitPlayer();
     } on AssertionError {
       // 播放器已被销毁（快速退出）：静默返回
@@ -1348,7 +1348,7 @@ class _PlayerPageState extends State<PlayerPage>
     if (_settings.videoOrientation != VideoOrientationMode.auto) return;
     if (!mounted || _disposed || _exiting) return;
     if (_portraitActive || _audioActive.value) return;
-    await SystemChrome.setPreferredOrientations(PlayerOrientation.landscape);
+    await PlayerOrientation.apply(PlayerOrientation.landscape);
   }
 
   /// 判断当前视频是否为竖屏，**结合旋转元数据**（工作.md 第 5 点，参考小喵 KT：
@@ -3166,10 +3166,10 @@ class _PlayerPageState extends State<PlayerPage>
     //   不再跟随（用户明确要了这个方向，不该被重力立刻转回去），按原来的
     //   方式恢复横屏。
     if (_followPhoneRotation && !_windowIsPortrait) {
-      SystemChrome.setPreferredOrientations(PlayerOrientation.appDefault);
+      PlayerOrientation.apply(PlayerOrientation.appDefault);
     } else {
       _followPhoneRotation = false;
-      SystemChrome.setPreferredOrientations(PlayerOrientation.landscape);
+      PlayerOrientation.apply(PlayerOrientation.landscape);
     }
     _enterFullscreen();
     _resetHideTimer();
@@ -3233,7 +3233,7 @@ class _PlayerPageState extends State<PlayerPage>
     _hideTimer?.cancel();
     _audioActive.value = true;
     if (mounted) setState(() {});
-    await SystemChrome.setPreferredOrientations(PlayerOrientation.portrait);
+    await PlayerOrientation.apply(PlayerOrientation.portrait);
     if (!mounted) return; // 防异步间隙后使用过期 context
     await Navigator.of(context).push(
       PageRouteBuilder(
@@ -3286,7 +3286,7 @@ class _PlayerPageState extends State<PlayerPage>
     } else {
       final lockPortrait =
           _settings.videoOrientation == VideoOrientationMode.portrait;
-      await SystemChrome.setPreferredOrientations(
+      await PlayerOrientation.apply(
         lockPortrait ? PlayerOrientation.portrait : PlayerOrientation.landscape,
       );
     }

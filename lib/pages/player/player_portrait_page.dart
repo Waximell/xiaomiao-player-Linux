@@ -597,7 +597,7 @@ class _PlayerPortraitPageState extends State<PlayerPortraitPage>
     // 竖屏 + 沉浸式全屏（状态栏/导航栏隐藏）。
     // 跟随手机方向进来的：**不锁竖屏**，方向仍交还系统——窗口转回横屏时本页
     // 自己 pop（见 didChangeMetrics），锁住就再也回不去横屏了
-    SystemChrome.setPreferredOrientations(
+    PlayerOrientation.apply(
       widget.followPhoneRotation
           ? PlayerOrientation.appDefault
           : PlayerOrientation.portrait,
