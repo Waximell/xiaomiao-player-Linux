@@ -1,0 +1,144 @@
+name: moumou
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.3.9+7
+
+environment:
+  sdk: ^3.12.2
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+  # 多语言：官方 gen_l10n（ARB → AppLocalizations）；intl 交给 pub 解析版本
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+  # 本地播放器
+  media_kit: ^1.1.11
+  media_kit_video: ^1.2.5
+  # Linux 专用：不拉 Android/Windows/macOS 原生内核
+  media_kit_libs_linux: ^1.2.1
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
+  # 超分着色器：拷贝 assets 到应用目录 + 拼接绝对路径
+  path_provider: ^2.1.5
+  path: ^1.9.0
+  # 更多 Material 3 调色板风格（FlexSchemeVariant，21 种变体）
+  flex_seed_scheme: ^4.0.1
+  saver_gallery: ^5.1.0
+  # 快速缩略图引擎（FFI 直连自建 libmpv.so 的 mk_thumbnail_*）的内存分配
+  ffi: ^2.1.0
+  # 关于页显示应用版本号
+  package_info_plus: ^9.0.1
+  # 关于页图标（邮箱 / GitHub，SVG 素材来自参考项目图标素材）
+  flutter_svg: ^2.2.3
+  # 弹幕渲染引擎（弹幕移植方案阶段1：本地同名 XML 弹幕 + 开关）
+  canvas_danmaku: ^0.3.3
+  # 关于页跳转（写邮件 / 打开浏览器）
+  url_launcher: ^6.3.0
+  # 弹幕网络服务（弹弹play 开放弹幕网络）：HTTP 请求 + 签名（SHA256/Base64）
+  http: ^1.6.0
+  crypto: ^3.0.7
+  # 哔哩哔哩登录：扫码二维码渲染（纯 Dart）
+  qr_flutter: ^4.1.0
+  # 哔哩哔哩登录：Cookie 凭证加密存储（Android 走 EncryptedSharedPreferences/Keystore）
+  flutter_secure_storage: ^9.2.2
+  # SMB 网络存储：纯 Dart 客户端，fork 自 smb_connect 0.0.9（去掉全局串行锁，
+  # 支持请求在途并发），配合 lib/services/network/smb_client.dart 的并发预读提升吞吐。
+  # 基线版本 0.0.9；补丁清单与升级步骤见 third_party/smb_connect/FORK.md（升级前必读）。
+  smb_connect:
+    path: third_party/smb_connect
+  # 投屏（DLNA/UPnP）：SSDP 发现渲染器 + SetAVTransportURI/Play 推流，
+  # Kazumi 同款纯 Dart 库（无原生依赖）。
+  dlna_dart: ^0.1.1
+  # 应用内检查更新：GitHub Release 正文为 Markdown，用 flutter_markdown_plus
+  # 渲染更新说明（工作.md：更新功能）。原 flutter_markdown 已被官方停维护，
+  # plus 是接手的社区分支，API 一致。
+  flutter_markdown_plus: ^1.0.12
+  # 自定义主题色：色相环 + 饱和度/明度选择器（纯 Dart，无原生依赖）
+  # 用 plus fork：比原版多了 hexInputBar 手输框 + RGB/HSV/HSL 标签切换
+  flutter_color_picker_plus: ^2.2.1
+  # FTP 中文文件名：IIS / 老 Serv-U 等服务器用 GBK（而非 UTF-8）编解码目录列表
+  # 与命令，按 `OPTS UTF8 ON` 的应答选编码（纯 Dart，无原生依赖）。
+  charset: ^2.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 权限测试需要 mock 权限平台接口
+  permission_handler_platform_interface: ^4.4.0
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+
+  # 多语言：每次构建/生成时由 gen_l10n 读 l10n.yaml 生成 AppLocalizations
+  generate: true
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/icons/
+    - assets/icon/
+    # https 播放所需的 CA 证书库：自编 libmpv 静态链接 mbedTLS，而 ffmpeg 的
+    # mbedTLS 后端没有默认证书库路径 → 必须由 App 用 mpv `tls-ca-file` 指过去，
+    # 否则所有 https 都在证书校验阶段失败（详见 lib/services/tls_ca_bundle.dart）
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package
+

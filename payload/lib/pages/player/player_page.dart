@@ -1,0 +1,4372 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:moumou/l10n/app_localizations.dart';
+import 'package:moumou/l10n/error_texts.dart';
+import 'package:moumou/l10n/label_maps.dart';
+import 'package:moumou/models/player_action.dart';
+import 'package:moumou/models/playlist_sort.dart';
+import 'package:moumou/models/bili_media.dart';
+import 'package:moumou/models/bili_playlist.dart';
+import 'package:moumou/models/chapter_info.dart';
+import 'package:moumou/models/danmaku_entry.dart';
+import 'package:moumou/models/dandan_models.dart';
+import 'package:moumou/models/video_file.dart';
+import 'package:moumou/models/subtitle_font_injection.dart';
+import 'package:moumou/pages/player/audio_player_page.dart';
+import 'package:moumou/pages/player/player_metrics.dart';
+import 'package:moumou/pages/player/player_portrait_page.dart';
+import 'package:moumou/pages/player/player_session_state.dart';
+import 'package:moumou/pages/player/views/audio_panel.dart';
+import 'package:moumou/pages/player/views/equalizer_panel.dart';
+import 'package:moumou/pages/player/views/player_ab_loop_panel.dart';
+import 'package:moumou/pages/player/views/player_action_grid.dart';
+import 'package:moumou/pages/player/views/player_bili_playlist_panel.dart';
+import 'package:moumou/pages/player/views/player_bottom_bar.dart';
+import 'package:moumou/pages/player/views/player_button_size_panel.dart';
+import 'package:moumou/pages/player/views/player_chapter_bar.dart';
+import 'package:moumou/pages/player/views/player_chapter_panel.dart';
+import 'package:moumou/pages/player/views/player_center_cluster.dart';
+import 'package:moumou/pages/player/views/player_customize_panel.dart';
+import 'package:moumou/pages/player/views/player_danmaku_layer.dart';
+import 'package:moumou/pages/player/views/player_danmaku_episodes_panel.dart';
+import 'package:moumou/pages/player/views/player_danmaku_network_panel.dart';
+import 'package:moumou/pages/player/views/player_danmaku_panel.dart';
+import 'package:moumou/pages/player/views/player_danmaku_settings_panel.dart';
+import 'package:moumou/pages/player/views/player_decode_panel.dart';
+import 'package:moumou/pages/player/views/player_diagnostics_panel.dart';
+import 'package:moumou/pages/player/views/player_fit_panel.dart';
+import 'package:moumou/pages/player/views/player_flip_panel.dart';
+import 'package:moumou/pages/player/views/player_gesture_indicator.dart';
+import 'package:moumou/pages/player/views/player_gesture_layer.dart';
+import 'package:moumou/pages/player/views/player_intro_outro_panel.dart';
+import 'package:moumou/pages/player/views/player_loop_panel.dart';
+import 'package:moumou/pages/player/views/player_playlist_panel.dart';
+import 'package:moumou/pages/player/views/player_post_process_panel.dart';
+import 'package:moumou/pages/player/views/player_quality_panel.dart';
+import 'package:moumou/pages/player/views/player_resume_indicator.dart';
+import 'package:moumou/pages/player/views/player_right_actions.dart';
+import 'package:moumou/pages/player/views/player_speed_indicator.dart';
+import 'package:moumou/pages/player/views/player_speed_panel.dart';
+import 'package:moumou/pages/player/views/player_status_bar.dart';
+import 'package:moumou/pages/player/views/player_super_resolution_panel.dart';
+import 'package:moumou/pages/player/views/player_swipe_seek_overlay.dart';
+import 'package:moumou/pages/player/views/player_thumbnail_preview.dart';
+import 'package:moumou/pages/player/views/player_top_bar.dart';
+import 'package:moumou/pages/player/views/player_zoom_restore_chip.dart';
+import 'package:moumou/pages/player/views/subtitle_panel.dart';
+import 'package:moumou/services/audio_service.dart';
+import 'package:moumou/services/chapter_tracker.dart';
+import 'package:moumou/services/danmaku_service.dart';
+import 'package:moumou/services/danmaku_network_service.dart';
+import 'package:moumou/services/danmaku_search_store.dart';
+import 'package:moumou/services/decode_settings.dart';
+import 'package:moumou/services/device_services.dart';
+import 'package:moumou/services/bilibili/bili_danmaku_service.dart';
+import 'package:moumou/services/bilibili/bili_constants.dart';
+import 'package:moumou/services/bilibili/bili_stream_proxy.dart';
+import 'package:moumou/services/bilibili/bili_video_service.dart';
+import 'package:moumou/services/cast/lan_media_server.dart';
+import 'package:moumou/services/fast_thumbnails.dart';
+import 'package:moumou/services/intro_outro_settings.dart';
+import 'package:moumou/services/intro_outro_tracker.dart';
+import 'package:moumou/services/network/network_connection_settings.dart';
+import 'package:moumou/services/network/network_playlist_source.dart';
+import 'package:moumou/services/network/network_repository.dart';
+import 'package:moumou/services/playback_progress_service.dart';
+import 'package:moumou/services/playback_tuning.dart';
+import 'package:moumou/services/player_controls_settings.dart';
+import 'package:moumou/services/post_process_service.dart';
+import 'package:moumou/services/subtitle_service.dart';
+import 'package:moumou/services/subtitle_settings.dart';
+import 'package:moumou/services/super_resolution_service.dart';
+import 'package:moumou/services/video_scanner.dart';
+import 'package:moumou/services/view_settings.dart';
+import 'package:moumou/utils/app_dialog.dart';
+import 'package:moumou/utils/cast_source.dart';
+import 'package:moumou/utils/formatters.dart';
+import 'package:moumou/utils/intro_outro_skip.dart';
+import 'package:moumou/utils/mpv_tuning.dart';
+import 'package:moumou/utils/network_mime_types.dart';
+import 'package:moumou/utils/network_playlist.dart';
+import 'package:moumou/utils/network_sort.dart';
+import 'package:moumou/utils/pip_aspect.dart';
+import 'package:moumou/utils/playback_completion.dart';
+import 'package:moumou/utils/playback_history.dart';
+import 'package:moumou/utils/playback_restore.dart';
+import 'package:moumou/utils/player_controls_visibility.dart';
+import 'package:moumou/utils/player_diagnostics.dart';
+import 'package:moumou/utils/player_exit.dart';
+import 'package:moumou/utils/player_gestures.dart';
+import 'package:moumou/utils/player_orientation.dart';
+import 'package:moumou/widgets/app_frame.dart';
+import 'package:moumou/widgets/cast_device_dialog.dart';
+import 'package:moumou/widgets/dolby_vision_hint.dart';
+import 'package:moumou/widgets/player_panel.dart';
+import 'package:saver_gallery/saver_gallery.dart';
+
+/// 播放页：默认横屏播放，自定义现代化控制 UI。
+///
+/// - 中央三键簇：快退 / 播放暂停 / 快进；
+/// - 双击手势可自定义（暂停 / 左退右进 / 混合）；
+/// - 右上角固定「更多」按钮 → 右侧面板（动作网格 + 自定义 / 按钮大小）；
+/// - 倍速等二级设置统一走右侧滑入面板（[showPlayerPanel]）。
+///
+/// [playlist] 为兄弟视频列表（用于「下一集」，null 时按钮置灰）。
+///
+/// 网络存储播放（[networkSource] 非空）的媒体路径是回环代理 URL，入口拿不到
+/// 兄弟列表，由本页在 [PlayerPage.playlist] 为空时按远端目录补全
+/// （见 `_loadNetworkFolderPlaylist`）；列表项身份是**远端路径**。
+class PlayerPage extends StatefulWidget {
+  final String path;
+  final String title;
+  final List<VideoFile>? playlist;
+
+  /// 网络存储播放来源（null = 本地文件）：网络浏览页用 [VideoFile.remotePath]
+  /// / [VideoFile.connectionId] 带上「这条流来自哪个连接、远端哪个文件」，
+  /// 字幕侧据此做同名字幕远端扫描（本地 `File` 链路对 loopback URL 不成立）。
+  final VideoFile? networkSource;
+
+  /// 拿到真实媒体时长后回报一次（毫秒；网络存储列表页用它记住时长，
+  /// 因为远端不做媒体探测）。null = 不回报。
+  ///
+  /// [remotePath] 为本次回报对应的**远端路径**（本地播放为空串）：切集后
+  /// 新一集的时长不能被记到上一集头上，列表页据此落到正确的文件。
+  final void Function(String remotePath, int durationMs)? onDurationKnown;
+
+  /// B 站在线播放媒体（null = 本地/网络文件播放）。非空时走双流 + 代理 +
+  /// B 站弹幕 + OP/ED 章节 + 清晰度切换流程。
+  final BiliMedia? biliMedia;
+
+  /// B 站番剧整季剧集列表（番剧在线播放时由启动器传入）。
+  /// 非空时「下一集」/播放列表面板走 B 站剧集列表，与本地 [playlist] 互斥。
+  final BiliPlaylist? biliPlaylist;
+
+  /// 主界面（视频页）当前的视频排序字段/方向：播放列表「跟随主界面」状态下
+  /// 两枚排序胶囊显示它，顺序直接用入口传进来的 [playlist]。
+  ///
+  /// 首页/目录页按自己的 ViewSettings 传入；历史记录、外部打开等没有主界面
+  /// 排序的入口用默认值（名称升序，与媒体库补全列表的顺序一致）。
+  final VideoSortChoice mainSort;
+
+  /// 网络存储播放时网络浏览页的排序（null = 非网络播放或入口没传）。
+  ///
+  /// 网络浏览页与播放列表用同一份网络排序设置：播放页据此补全同目录兄弟列表，
+  /// 保证「网络页看到的顺序 = 播放列表顺序 = 下一集顺序」。网络排序只有
+  /// 名称/日期，见 [NetworkSortField]。
+  final NetworkSort? networkSort;
+
+  const PlayerPage({
+    super.key,
+    required this.path,
+    required this.title,
+    this.playlist,
+    this.networkSource,
+    this.onDurationKnown,
+    this.biliMedia,
+    this.biliPlaylist,
+    this.mainSort = const (field: VideoSortField.name, order: SortOrder.asc),
+    this.networkSort,
+  });
+
+  @override
+  State<PlayerPage> createState() => _PlayerPageState();
+}
+
+class _PlayerPageState extends State<PlayerPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  late final Player _player;
+  late final VideoController _controller;
+  final PlayerControlsSettings _settings = PlayerControlsSettings.instance;
+
+  late String _path;
+  late String _title;
+  bool _controlsVisible = true;
+
+  /// 下一次「暂停」事件不呼出控制层（双击暂停专用，一次性）：
+  /// 用户双击只是想暂停，控制条不该跟着弹出来（用户反馈）。
+  /// 由 [_togglePlay] 置位、`playing` 流消费，任何一次状态变化后都清掉。
+  bool _suppressControlsOnNextPause = false;
+
+  /// 当前媒体的网络存储来源（null = 本地文件；切集/B 站播放会清空）。
+  VideoFile? _networkSource;
+
+  /// 是否已把本次媒体的真实时长回报出去（[PlayerPage.onDurationKnown] 只回报一次）
+  bool _reportedDuration = false;
+
+  /// B 站在线播放媒体（null = 本地/网络文件播放）。画质切换时更新为新实例。
+  BiliMedia? _biliMedia;
+  Timer? _hideTimer;
+  bool _playing = false;
+  bool _buffering = false;
+
+  // ── 播放位置/时长（risk_audit #1）────────────────────────
+  // 位置流几十毫秒来一次事件。整页 setState 会重建整棵 Stack（视频层/手势层/
+  // 顶栏/底栏/右侧按钮/中央簇…），而实际只有进度条、时间文本、常驻进度线
+  // 需要跟随。改为页面级 ValueNotifier：进度条/时间/进度线用
+  // [_progressListenable] 局部订阅只重建自身；页面级 setState 只留给低频状态
+  // （播放/暂停、控制层显隐、锁定、切集等）。
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration?> _dragPositionNotifier = ValueNotifier(null);
+
+  Duration get _position => _positionNotifier.value;
+  Duration get _duration => _durationNotifier.value;
+  Duration? get _dragPosition => _dragPositionNotifier.value;
+
+  /// 进度相关监听合并：底栏（进度条/时间文本）与常驻进度线局部订阅用
+  late final Listenable _progressListenable = Listenable.merge([
+    _positionNotifier,
+    _durationNotifier,
+    _dragPositionNotifier,
+  ]);
+
+  /// 章节监听合并：底栏（进度条标记/章节名称）+ 胶囊浮层订阅用
+  late final Listenable _chapterListenable =
+      Listenable.merge([_progressListenable, _chapterTracker]);
+
+  /// 底栏监听合并：章节 + 弹幕开关状态（弹幕开关图标随 danmakuOn 刷新）+
+  /// 兄弟视频列表（媒体库补全完成后「下一集」按钮自动刷新）+
+  /// 番剧排序（换排序后「下一集」是否有下一集要立刻刷新）
+  late final Listenable _bottomBarListenable = Listenable.merge([
+    _chapterListenable,
+    _danmakuController,
+    _playlistNotifier,
+    _biliSort,
+  ]);
+
+  /// 章节状态跟踪器（工作.md 章节功能）：读取章节与跳过片段、跟踪当前
+  /// 章节与胶囊自动弹出窗口；横竖屏共享同一实例（切集/位置流统一驱动）。
+  late final ChapterTracker _chapterTracker;
+
+  /// 字幕控制器（工作.md 阶段1 第 3 点）：轨道列表/主次字幕/外挂导入/设置应用；
+  /// 横竖屏共享同一实例（同一 Player，切集后统一重新应用）。
+  late final SubtitleController _subtitleController;
+
+  /// 音频控制器（工作.md 音频功能）：音轨列表/切音轨/外部音轨导入·移除/
+  /// 声道/音频处理；横竖屏共享同一实例（同一 Player，切集后统一重新应用）。
+  late final AudioController _audioController;
+
+  /// 弹幕控制器（弹幕移植方案阶段1）：本地同名弹幕加载 + 秒桶调度发射 +
+  /// canvas 渲染层驱动；横竖屏共享同一实例（同一 Player，切集后重新加载）。
+  late final DanmakuController _danmakuController;
+
+  /// 片头片尾状态跟踪器（工作.md 片头片尾功能）：驱动片头/片尾自动跳过
+  /// 动作；横竖屏共享同一实例（切集/位置流统一驱动）。
+  late final IntroOutroTracker _introOutroTracker =
+      IntroOutroTracker(IntroOutroSettings.instance);
+
+  /// 横竖屏共享的会话状态（B4/D2）：音量·音量增强·亮度·倍速·水平滑动 seek·
+  /// 双指缩放全部收敛到这一个页面局部对象，本页创建并持有、注入竖屏页
+  /// （禁止全局单例，§4.1）。原先两页各一份实现导致 P1-1/P1-2/P1-4/P1-5 漂移。
+  late final PlayerSessionState _session;
+
+  /// 控制层显隐动画（Kazumi 风格：顶部下落 / 底部上升 / 右侧滑入 / 中央淡入）
+  late final AnimationController _controlsController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+    value: 1, // 初始显示
+  );
+  late final Animation<Offset> _topSlide = Tween<Offset>(
+    begin: const Offset(0, -1),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _controlsController, curve: Curves.easeInOut));
+  late final Animation<Offset> _bottomSlide = Tween<Offset>(
+    begin: const Offset(0, 1),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _controlsController, curve: Curves.easeInOut));
+  late final Animation<Offset> _rightSlide = Tween<Offset>(
+    begin: const Offset(1, 0),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _controlsController, curve: Curves.easeInOut));
+
+  /// 控制层是否锁定（锁定后隐藏全部控制；左右两侧出现解锁按钮，
+  /// 单击屏幕可呼出/隐藏解锁按钮）
+  bool _locked = false;
+
+  /// 解锁按钮显隐动画（锁定后从左右两侧滑入，单击屏幕切换呼出/隐藏）
+  late final AnimationController _unlockController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+  );
+
+  /// 解锁按钮自动收回计时：锁定态呼出后过了 [kPlayerAutoHideDelay] 自己收回去
+  /// （与控制层同一时长）。只负责「自动」那一次——用户主动单击收起时取消它，
+  /// 否则会出现「刚手动收起又被旧计时器收起一次」的错位。
+  Timer? _unlockHideTimer;
+  late final Animation<Offset> _leftUnlockSlide = Tween<Offset>(
+    begin: const Offset(-1, 0),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _unlockController, curve: Curves.easeInOut));
+  late final Animation<Offset> _rightUnlockSlide = Tween<Offset>(
+    begin: const Offset(1, 0),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _unlockController, curve: Curves.easeInOut));
+
+  String? _seekFeedback;
+  Timer? _seekFeedbackTimer;
+
+  /// 当前视口尺寸（手势计算用，build 时更新）
+  double _viewportWidth = 0;
+  double _viewportHeight = 0;
+
+  // ── 手势指示器 ─────────────────────────────────────────
+
+  /// 手势指示器（音量/亮度共用，2 秒无操作自动隐藏）。
+  /// 数值/boosting 来自 [_session]，本页只负责显示与自动隐藏（两页同款）。
+  ({GestureIndicatorKind kind, double value, bool boosting})? _indicator;
+
+  /// 最近一次显示的指示器类型：退场动画期间 [_indicator] 已置 null，
+  /// 但布局位置（左/右）必须沿用旧类型，否则亮度退场会跳到左侧
+  GestureIndicatorKind? _indicatorKind;
+  Timer? _indicatorHideTimer;
+
+  // ── 长按倍速 ──────────────────────────────────────────
+
+  bool _longPressing = false;
+
+  /// 当前长按倍速（初始为设置值，左右滑动后为动态档位）
+  double _longPressSpeed = 2.0;
+
+  /// 长按按下位置（动态调速的横向位移基准）
+  Offset? _longPressStartPos;
+
+  /// 动态调速起始档位索引（按下时确定，避免调速过程中漂移）
+  int _dynamicStartIndex = 0;
+  bool _dynamicSpeedActive = false;
+  bool _speedBarVisible = false;
+  Timer? _speedBarTimer;
+
+  // ── 进度条缩略图预览 ──────────────────────────────────
+
+  /// 当前预览（frame 为 null 表示帧仍在加载，先显示占位 + 时间）
+  ({FastThumbFrame? frame, Duration time})? _thumbPreview;
+  double _thumbFraction = 0;
+
+  /// 气泡可见性（拖动中 true；松手淡出后 false 再卸载）
+  bool _thumbVisible = false;
+  Timer? _thumbHideTimer;
+  int _lastThumbBucketMs = -1;
+
+  final List<StreamSubscription<dynamic>> _subs = [];
+
+  /// 兄弟视频列表（同目录视频）：底栏「下一集」、EOF 自动连播/列表循环、
+  /// 播放列表面板的数据源。
+  ///
+  /// 入口传了 [PlayerPage.playlist] 就用它（首页/文件夹页给的是当前排序后的
+  /// 可见列表）；没传（首页「最近播放」、历史记录、外部打开）时按当前视频
+  /// 所在文件夹从媒体库补全（[_loadFolderPlaylist]）——否则播放列表面板只会
+  /// 显示「当前文件夹没有其他视频」。
+  ///
+  /// 用 [ValueNotifier] 而不是普通字段：补全是异步的，且竖屏页与横屏页共享
+  /// 同一份（补全完成前竖屏页可能已被 push，传快照会让它拿到空表）。
+  final ValueNotifier<List<VideoFile>> _playlistNotifier =
+      ValueNotifier(const <VideoFile>[]);
+
+  List<VideoFile> get _playlist => _playlistNotifier.value;
+
+  /// 入口给的播放列表**原始集合**（顺序 = 主界面顺序）：
+  /// - 跟随主界面（[_playlistSort] 为 null）→ [_playlist] 直接用它；
+  /// - 自定义排序 → 按 [_playlistSort] 的字段+方向重排它。
+  /// 异步补全（本地/网络）完成时也写这里，排序选择不会被覆盖。
+  List<VideoFile> _entryPlaylist = const <VideoFile>[];
+
+  /// 播放列表排序选择（null = 跟随主界面）：**只在本次播放内有效**，
+  /// 由播放列表面板写入，竖屏页读同一份（排序不改文件夹页的全局设置）。
+  final ValueNotifier<VideoSortChoice?> _playlistSort =
+      ValueNotifier<VideoSortChoice?>(null);
+
+  /// 「跟随主界面」时面板两枚胶囊显示的字段/方向。
+  ///
+  /// 网络存储播放跟**网络浏览页**的排序（名称/日期）；本地播放跟视频页
+  /// （入口传进来的 [PlayerPage.mainSort]）。
+  VideoSortChoice get _mainSort {
+    final net = widget.networkSort;
+    if (net == null) return widget.mainSort;
+    return (
+      field: net.field == NetworkSortField.date
+          ? VideoSortField.date
+          : VideoSortField.name,
+      order: net.order == NetworkSortOrder.desc ? SortOrder.desc : SortOrder.asc,
+    );
+  }
+
+  /// 「排序方式」菜单可选字段：本地 4 个；网络只有名称/日期（与网络浏览页
+  /// 的排序字段一致——远端大小/时长不可靠）。
+  List<VideoSortField> get _playlistSortFields => widget.networkSort == null
+      ? VideoSortField.values
+      : const [VideoSortField.name, VideoSortField.date];
+
+  /// 设置播放列表原始集合，并按当前排序选择重新派生 [_playlist]。
+  void _setEntryPlaylist(List<VideoFile> videos) {
+    _entryPlaylist = videos;
+    _applyPlaylistOrder();
+  }
+
+  /// 按当前排序选择重新派生 [_playlist]（跟随主界面 = 入口原始顺序）。
+  void _applyPlaylistOrder() {
+    final choice = _playlistSort.value;
+    if (choice == null) {
+      _playlistNotifier.value = _entryPlaylist;
+      return;
+    }
+    _playlistNotifier.value = widget.networkSort == null
+        ? sortVideosBy(_entryPlaylist, choice.field, choice.order)
+        // 网络播放按网络页规则排（缺修改时间恒排末尾），与浏览页一致
+        : sortNetworkPlaylistVideos(_entryPlaylist, _networkSortOf(choice));
+  }
+
+  /// 面板的字段/方向 → 网络排序（网络播放的菜单只给名称/日期）
+  NetworkSort _networkSortOf(VideoSortChoice choice) => NetworkSort(
+        field: choice.field == VideoSortField.date
+            ? NetworkSortField.date
+            : NetworkSortField.name,
+        order: choice.order == SortOrder.desc
+            ? NetworkSortOrder.desc
+            : NetworkSortOrder.asc,
+      );
+
+  /// 播放列表面板切换排序：重排**实际播放列表**，让「下一集 / 自动连播 /
+  /// 列表循环」按面板显示的顺序走；选择只在本次播放内有效。
+  ///
+  /// 结果写进共享的 [_playlistNotifier]，竖屏页读同一份、立刻同步。
+  void _applyPlaylistSort(VideoSortChoice? choice) {
+    if (_disposed || !mounted) return;
+    _playlistSort.value = choice;
+    _applyPlaylistOrder();
+  }
+
+  /// 当前媒体在 [_playlist] 里的身份（列表定位 / 同目录过滤 / 高亮都用它）：
+  /// 网络存储播放用**远端路径**（媒体路径是回环 URL，token 每次都换，
+  /// 不能当身份），本地播放与媒体路径一致。见 [playlistKeyOf]。
+  String get _playlistKey => playlistKeyOf(_path, _networkSource);
+
+  /// 本页自己注册的网络回流地址（网络列表切集时注册的那条），退出时释放。
+  /// 入口（网络浏览页）注册的首条流不在这里——那条由浏览页自己释放。
+  String? _ownNetworkUrl;
+
+  /// B 站番剧播放列表的排序（面板三枚胶囊，**只在本次播放内有效**）：
+  /// 播放列表 / 下一集 / 自动连播 / 列表循环都读 [_biliItems] 这一份顺序。
+  final ValueNotifier<BiliPlaylistSort> _biliSort =
+      ValueNotifier<BiliPlaylistSort>(BiliPlaylistSort.season);
+
+  /// 当前排序下的剧集顺序（B 站播放时用于定位/下一集/循环）。
+  ///
+  /// 结果缓存：位置流每次刷新都会问 [_hasNext]，整季（上千集）不能每次重排；
+  /// 只有排序模式变化才重建。
+  List<BiliPlaylistItem>? _biliItemsCache;
+  BiliPlaylistSort? _biliItemsCacheSort;
+
+  List<BiliPlaylistItem> get _biliItems {
+    final bili = widget.biliPlaylist;
+    if (bili == null) return const <BiliPlaylistItem>[];
+    final sort = _biliSort.value;
+    if (_biliItemsCache != null && _biliItemsCacheSort == sort) {
+      return _biliItemsCache!;
+    }
+    final items = sortBiliPlaylistItems(bili.items, sort);
+    _biliItemsCache = items;
+    _biliItemsCacheSort = sort;
+    return items;
+  }
+
+  /// 当前 B 站剧集在 [_biliItems] 中的下标（-1 = 未定位）
+  int get _biliIndex {
+    final epId = _biliMedia?.epId;
+    if (epId == null) return -1;
+    final items = _biliItems;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].epId == epId) return i;
+    }
+    return -1;
+  }
+
+  /// 面板换排序：更新本次播放的剧集顺序（竖屏页读同一份）。
+  void _onBiliSortChanged(BiliPlaylistSort sort) {
+    if (_disposed || !mounted) return;
+    _biliSort.value = sort;
+  }
+
+  /// 是否存在「下一集」：
+  /// - B 站番剧在线播放 → 按（排序后的）剧集列表当前集定位后判断；
+  /// - 本地/网络文件 → 按 [_playlist] 当前项定位后判断。
+  bool get _hasNext {
+    if (_biliMedia != null) {
+      final idx = _biliIndex;
+      return idx >= 0 && idx < _biliItems.length - 1;
+    }
+    final list = _playlist;
+    if (list.isEmpty) return false;
+    final idx = list.indexWhere((v) => v.path == _playlistKey);
+    return idx >= 0 && idx < list.length - 1;
+  }
+
+  /// 是否有可循环的播放列表（EOF「列表循环」判定用，两种来源合并）
+  bool get _hasAnyPlaylist =>
+      _playlist.isNotEmpty || (widget.biliPlaylist?.isNotEmpty ?? false);
+
+  // ── 恢复进度 / 播放完成（EOF）处理 ──────────────────────
+
+  // 注：`hr-seek` / `profile` / `gpu-api` 三个「必须早于 open」的属性已收口到
+  // `services/player_renderer_settings.dart`，由 `applyPlaybackTuning` 在每次
+  // open 前统一写入（原先在本页 initState 以 unawaited 下发，与 open 竞速）。
+
+
+  /// 应用 mpv 移动端缓存/网络调参（§4.26）。
+  ///
+  /// 实现收口在 [applyPlaybackTuning]——听视频切歌等其它打开媒体的地方共用
+  /// 同一份，见 `services/playback_tuning.dart`。
+  Future<void> _applyPlaybackTuning(String path) =>
+      applyPlaybackTuning(_player, path);
+
+  /// 恢复进度指示器是否可见（恢复到位后显示，自管理 2.5s 隐藏）
+  bool _resumeVisible = false;
+
+  /// 正在恢复进度（true 时用不透明封层盖住视频：暂停加载 + seek 都在
+  /// 封层下进行，用户看不到 mpv 暂停态渲染的 0 时刻第一帧海报；位置
+  /// 确认到位后揭开 + 播放，首帧即目标帧——v5 重写，无开头闪现）。
+  bool _restoring = false;
+
+  /// 正在切换视频（防 EOF 重入：切集期间旧文件可能触发 completed 事件）
+  bool _isSwitchingVideo = false;
+
+  /// 正在处理播放完成事件（防 completed 流重复触发）
+  bool _isHandlingEndOfFile = false;
+
+  /// 竖屏页打开期间为 true：本页（横屏）的 EOF 处理让位给竖屏页
+  /// （两者共享同一 [Player]，若都处理 completed 会重复切集）
+  bool _portraitActive = false;
+
+  /// 听视频页打开期间为 true：本页的 EOF 处理让位给听视频页
+  /// （听视频页共享同一 [Player] 并自行处理切歌/随机/循环）。
+  /// 用 ValueNotifier 供 Video 的 pauseUponEnteringBackgroundMode 局部订阅：
+  /// 听视频页打开时退后台不暂停（后台播放），否则保持默认退后台暂停。
+  final ValueNotifier<bool> _audioActive = ValueNotifier(false);
+
+  /// 已开始退出播放页（异步退出流程中禁止再自动 push 竖屏页，防栈错乱）
+  bool _exiting = false;
+
+  /// 退出期间横屏页整体黑化（竖屏退出时置位，盖住下层横屏页的 UI 骨架，
+  /// 保证任何时刻两层页面不同框，从机制上杜绝「两个竖屏界面」复现）。
+  bool _exitBlackout = false;
+
+  /// 本次播放是否「跟随手机方向」（进入时决定：设置开关 + 「自动」+
+  /// 系统「自动旋转」三者同时成立，见 [shouldFollowPhoneOrientation]）。
+  ///
+  /// 开启时本页不锁定方向（交还系统），横竖屏由手机方向决定：窗口转成竖屏
+  /// 就 push 竖屏播放页（[_syncPageWithPhoneOrientation]），竖屏页在窗口转回
+  /// 横屏时自己 pop 回本页。用户手动点「选择屏幕」= 手动接管，本次播放不再
+  /// 跟随（否则按下去会被重力立刻转回来）。
+  bool _followPhoneRotation = false;
+
+  /// 本次进页在「自动」模式下由**预读**把窗口锁成了竖屏（见
+  /// [_applyInitialOrientation]）。预读与播放器判定不一致时用它兜底纠回横屏
+  /// （[_applyVideoOrientation]），否则用户会卡在竖屏窗口里播横屏视频。
+  bool _initialPortraitLocked = false;
+
+  /// 播放器是否已销毁（退出路径先 await 销毁，widget dispose 兜底防重复）
+  bool _playerDisposed = false;
+
+  /// 页面已销毁（risk_audit #2）：dispose 置位，异步恢复/打开流程的每个
+  /// await 之后先查它，播放器销毁后的后续操作直接放弃——
+  /// 防止快速「退出→进入」循环里恢复流程继续 seek 抛
+  /// `AssertionError: [Player] has been disposed` 被全局兜底写成假崩溃日志。
+  bool _disposed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _path = widget.path;
+    _title = widget.title;
+    _biliMedia = widget.biliMedia;
+    // 网络存储播放：记下来源（字幕远端同名扫描要用）
+    _networkSource = widget.networkSource;
+    // 兄弟视频列表：入口给的就用（首页/文件夹页传的是当前排序的可见列表），
+    // 没给（最近播放/历史记录/外部打开）就按当前视频所在文件夹从媒体库补全。
+    // 补全不阻塞 open，完成后底栏「下一集」与播放列表面板自动跟上。
+    _setEntryPlaylist(widget.playlist ?? const <VideoFile>[]);
+    if (_playlistNotifier.value.isEmpty) unawaited(_loadFolderPlaylist());
+    // 开启 libass：走 mpv 原生字幕渲染（sub-visibility=yes），而非 Flutter
+    // SubtitleView。这也是内嵌字幕原生样式 / 各种 sub-* 样式属性生效的前提。
+    //
+    // ⚠️ 字体目录**必须**在 mpv_initialize 前通过 libassAndroidFontsDir/Name 注入，
+    // 且「跟随系统字库」也要注入（注入的是 /system/fonts）——运行时
+    // setProperty('sub-fonts-dir') 会破坏 libass 字体缓存，导致内嵌字幕（含 PGS
+    // 等位图字幕）整条不渲染（§4.10，历史 bug）。
+    // 判定抽到纯函数（lib/models/subtitle_font_injection.dart）以便单测。
+    final fontInjection = resolveSubtitleFontInjection(
+      font: SubtitleSettings.instance.font,
+      fontsDir: SubtitleSettings.instance.fontsDir,
+    );
+    _player = Player(
+      configuration: PlayerConfiguration(
+        libass: true,
+        libassAndroidFontsDir: fontInjection.fontsDir,
+        libassAndroidFontName: fontInjection.fontName,
+        // 协议白名单与 open 前重建的 demuxer-lavf-o 用同一份常量
+        // （见 utils/mpv_tuning.dart：不能靠读回来合并，方括号会丢）。
+        protocolWhitelist: kPlaybackProtocolWhitelist,
+      ),
+    );
+    // 解码档位注入（方案 A）：创建时传入 hwdec/vo，换档后下次打开视频生效
+    final decodeSettings = DecodeSettings.instance;
+    final decodeMode = decodeSettings.mode;
+    _controller = VideoController(
+      _player,
+      configuration: VideoControllerConfiguration(
+        vo: decodeSettings.gpuNext ? 'gpu-next' : 'gpu',
+        enableHardwareAcceleration: decodeMode != DecodeMode.sw,
+        hwdec: decodeMode.hwdec,
+      ),
+    );
+    // 章节跟踪器：绑定同一播放器（mpv chapter-list 子属性读取）
+    _chapterTracker = ChapterTracker(MpvChapterSource(_player));
+    // 字幕控制器：绑定同一播放器（track-list / sid / sub-add 单选模型）；
+    // 初始化就绪后应用一次设置（延迟/样式等在首帧前生效）
+    _subtitleController = SubtitleController(_player);
+    // 同名字幕自动加载成功后弹提示（服务层不依赖 UI，由页面层展示）
+    _subtitleController.onAutoLoadedSubtitle = (fileName) {
+      if (mounted) {
+        _toast(AppLocalizations.of(context).playerAutoLoadedSubtitle(fileName));
+      }
+    };
+    unawaited(_subtitleController.applyOnInit());
+    // 音频控制器：绑定同一播放器（track-list / aid / audio-add / 声道 / af）
+    _audioController = AudioController(_player);
+    // 音轨无法播放时自动回退（mpv 日志判定 + audio-params 复核）后提示用户：
+    // 例如 TrueHD 8 声道轨在 Android opensles 上初始化失败 → 退回 AC-3。
+    _audioController.onAudioFallback = (fallback, failed, reason) {
+      // 回调可能在 initState 期间注册，l10n 一律在回调内部现取
+      if (mounted) {
+        final l10n = AppLocalizations.of(context);
+        _toast(audioFallbackReasonText(l10n, reason, fallback));
+      }
+    };
+    // 内核缺音频滤镜（音频效果建不起来）时提示一次：服务层已经把出问题的
+    // 滤镜摘掉/整条停用，这里只负责告诉用户「音效没生效，但播放正常」。
+    _audioController.onAudioFiltersUnavailable = () {
+      if (mounted) {
+        _toast(AppLocalizations.of(context).playerAudioEffectsUnsupported);
+      }
+    };
+    unawaited(_audioController.applyOnInit());
+    // mpv 的错误/日志必须被消费（2026-10 实测教训）：此前应用侧完全不看
+    // `Player.stream.error`，在线播放失败时只剩「无限转圈、没有任何提示」——
+    // 用户和对着一堆日志排障的人都拿不到原因（https 证书库缺失那次就是这样
+    // 藏了很久）。这里把 error 变成一句可读提示（附 mpv 的原因），并把
+    // warn/error 级日志写进 logcat 便于定位。
+    _subs.add(
+      _player.stream.error.listen((message) {
+        final text = message.trim();
+        if (text.isEmpty) return;
+        debugPrint('[mpv error] $text');
+        // 音频滤镜（af）建不起来的报错交给 AudioController 兜底处理，并另给
+        // 一句看得懂的提示；这里不再弹裸的 mpv 报错（同一件事提示两次且看不懂）
+        if (isAudioFilterFailureLog('', text)) return;
+        if (!mounted) return;
+        final brief = text.length > 120 ? '${text.substring(0, 120)}…' : text;
+        _toast(AppLocalizations.of(context).playerPlaybackFailed(brief));
+      }),
+    );
+    _subs.add(
+      _player.stream.log.listen((event) {
+        final level = event.level.toLowerCase();
+        if (level == 'error' || level == 'fatal' || level == 'warn') {
+          debugPrint('[mpv $level] ${event.prefix}: ${event.text}');
+        }
+      }),
+    );
+    // 弹幕控制器：绑定同一播放器（本地同名弹幕加载 + 1s 秒桶发射 +
+    // 渲染层暂停/倍速同步；首开加载在 _openAndSetRate 的 open 完成后）
+    _danmakuController = DanmakuController(_player);
+    // 横竖屏共享会话状态（B4/D2）：倍速唯一真值、音量/亮度/增强、
+    // 水平滑动 seek、双指缩放；本页创建并持有、注入竖屏页
+    _session = PlayerSessionState(player: _player);
+    _session.addListener(_onSessionChanged);
+    // 自动加载弹幕（同名/记忆恢复）成功后弹提示（服务层不依赖 UI）
+    _danmakuController.onAutoLoadedDanmaku = (fileName) {
+      if (mounted) {
+        _toast(AppLocalizations.of(context).playerAutoLoadedDanmaku(fileName));
+      }
+    };
+    // 网络弹幕（弹弹Play 搜索选中/自动匹配/切集自动匹配）加载成功提示
+    _danmakuController.onNetworkDanmakuLoaded =
+        (anime, episode, serverName, autoMatch) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      final server = serverName ?? l10n.danmakuServerDefaultName;
+      _toast(
+        autoMatch
+            ? l10n.playerNetworkDanmakuLoadedAuto(anime, episode, server)
+            : l10n.playerNetworkDanmakuLoadedManual(anime, episode, server),
+      );
+    };
+    // 精确落帧 / 解码预设 / GPU 后端（hr-seek、profile、gpu-api）不再在此处
+    // 异步下发：三者都必须在 open 之前写入，已随 `_applyPlaybackTuning`
+    // 一并收口（见 services/player_renderer_settings.dart 的竞速说明）。
+
+    // 工作.md 第 7 点：关闭「启用播放界面动画」后，控制层/解锁按钮
+    // 的进出场动画时长归零（forward/reverse 立即完成，直接出现/消失）
+    if (!_settings.playerAnimations) {
+      _controlsController.duration = Duration.zero;
+      _unlockController.duration = Duration.zero;
+    }
+
+    // 倍速记忆：启用时恢复上次倍速（唯一真值在共享会话状态里，B4/P1-2）
+    // 进入播放器：未开启记忆时本次会话从「关闭/均衡」开始超分
+    // （退出播放/重启后自动回到默认关闭，记忆开启才恢复上次设置）
+    SuperResolutionService.instance.enterPlayer();
+    // 同步系统音量/亮度作为本次会话起点（音量从手机当前音量开始）；
+    // 会话状态不直接 setState，完成后由本页刷新一次
+    unawaited(_session.initFromDevice().then((_) {
+      if (mounted) setState(() {});
+    }));
+    _openAndSetRate();
+
+    // 初始方向（工作.md 第 5 点：视频方向设置）：
+    // - 跟随手机方向（开关 + 「自动」+ 系统自动旋转）：不指定方向、交还系统，
+    //   横竖屏由手机方向决定（竖屏窗口 → 竖屏播放页，见
+    //   [_syncPageWithPhoneOrientation]）；
+    // - 锁定竖屏 / 锁定横屏 → 按设置直接锁；
+    // - 自动 → 先**原生预读**本地文件头定方向（见 [_applyInitialOrientation]）。
+    //   历史做法是一上来先锁横屏、等 open 完成（0.5–1s）才发现视频是竖屏，
+    //   用户会看到「先横屏再转竖屏」的一次多余旋转（用户反馈）。
+    _followPhoneRotation = _shouldFollowPhoneOrientation;
+    unawaited(_applyInitialOrientation());
+    _enterFullscreen();
+    // 系统「自动旋转」可能在 App 存活期间被改过（通知栏快捷开关不触发
+    // 生命周期回调，缓存可能是旧的）：进入后异步刷新一次并纠正方向策略
+    unawaited(_refreshAutoRotateCache());
+
+    // 横屏旋转与路由转场是异步的，完成后系统栏可能被临时恢复显示；
+    // 在转场后再次确认沉浸式，并延迟重设一次，确保状态栏不再露出
+    WidgetsBinding.instance.addPostFrameCallback((_) => _enterFullscreen());
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _enterFullscreen();
+    });
+
+    _subs.add(
+      _player.stream.playing.listen((p) {
+        if (!mounted) return;
+        setState(() {
+          _playing = p;
+          // 双击暂停：这次不呼出控制层（见 [_suppressControlsOnNextPause]）；
+          // 一次性标志，任何一次播放状态变化后立即清掉，不影响别的暂停路径
+          final suppress = !p && _suppressControlsOnNextPause;
+          _suppressControlsOnNextPause = false;
+          // 暂停时呼出控制层（含中央播放键），但播完引起的暂停除外
+          // （mpv 播完先置 pause、后置 eof-reached，只看 completed 会漏；
+          // 单集循环 seek 0 重播时呼出会让每一遍循环都闪一下 UI）；
+          // 退出期间 pause 冻结末帧同样不弹控制层（防退出时控制条闪现）
+          if (shouldRevealControlsOnPause(
+                completed: _player.state.completed,
+                atEnd: isNearPlaybackEnd(_position, _duration),
+                suppressed: suppress,
+              ) &&
+              !p &&
+              !_locked &&
+              !_exiting) {
+            _controlsVisible = true;
+            _controlsController.forward();
+          }
+        });
+        // 恢复播放：控制层若还开着（暂停时呼出的那份没有隐藏计时），
+        // 重新开始自动隐藏，否则会一直挂在画面上
+        if (p && _controlsVisible) _resetHideTimer();
+      }),
+    );
+    // 缓冲状态（工作.md 第 6 点）：联网加载/seek 缓冲时置 true，驱动中央转圈动画
+    _subs.add(
+      _player.stream.buffering.listen((b) {
+        if (!mounted) return;
+        if (b != _buffering) setState(() => _buffering = b);
+      }),
+    );
+    // 位置/时长：只更新 ValueNotifier，不再整页 setState（risk_audit #1）
+    _subs.add(
+      _player.stream.position.listen((p) {
+        if (!_disposed && mounted) _positionNotifier.value = p;
+        // 章节跟踪：当前章节/跳过片段/胶囊自动弹出窗口随位置推进
+        _chapterTracker.onPositionChanged(p);
+        // 片头片尾：竖屏页/听视频页打开期间让位（共享同一 Player，
+        // 避免重复 seek / 切集）
+        if (_portraitActive || _audioActive.value) return;
+        _handleIntroOutroPosition(p);
+      }),
+    );
+    _subs.add(
+      _player.stream.duration.listen((d) {
+        if (!_disposed && mounted) _durationNotifier.value = d;
+        // 网络存储播放：把真实时长回报给列表页（远端不做探测，列表靠这个值
+        // 显示「时长」字段；一次播放只回报一次）。带上**当前**远端路径：
+        // 列表内切集后回报的是新一集的时长，不能记到上一集头上。
+        if (!_reportedDuration && d > Duration.zero) {
+          _reportedDuration = true;
+          widget.onDurationKnown?.call(
+            _networkSource?.remotePath ?? '',
+            d.inMilliseconds,
+          );
+        }
+        // 恢复进度改由 _openAndSetRate（open 完成后）统一触发，
+        // 避免 mpv 加载期 seek 被丢弃（历史 bug：指示器出现但进度不回位）。
+        // 缩略图预热不再进入播放即触发：改为「用户第一次拖动进度条时」
+        // 才从当前位置向外预热（见 _requestThumbnail），省去不拖动用户的
+        // 后台解码与缓存占用。
+      }),
+    );
+    // 播放完成（EOF）：走 handleEndOfFile 同款优先级链
+    // （单集循环→自动连播→列表循环→自动退出→自动暂停），带防重入标志
+    _subs.add(
+      _player.stream.completed.listen((completed) {
+        if (completed) _onPlaybackCompleted();
+      }),
+    );
+
+    _resetHideTimer();
+  }
+
+  /// 共享会话状态变化（音量/亮度/倍速/滑动浮层/缩放）：只重建本页 UI 壳。
+  /// 会话状态本身由横竖屏两页共用，数值语义不在这里分叉（B4/D2）。
+  void _onSessionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 读取保存进度并做阈值过滤（Kazumi `resumedNearEnd` 同思路）：
+  /// - 无进度 / ≤0 → null（从头播）；
+  /// - 已知时长且 `saved / duration < 5%` 或 `≥ 已观看阈值`（默认 95%，
+  ///   已看完）→ null（从头播，避免 seek 定位到结尾立即触发 EOF 连播）。
+  ///   时长优先用播放列表 MediaStore 的 durationMs（open 前就可知，
+  ///   不必等 mpv 上报）；列表无时长信息时按「有进度就恢复」处理，
+  ///   交给 [openAndRestore] 在时长就绪后 seek + 确认。
+  Duration? _resumeStartFor(String path) {
+    Duration? listDuration;
+    for (final v in _playlist) {
+      if (v.path == path && v.durationMs > 0) {
+        listDuration = Duration(milliseconds: v.durationMs);
+        break;
+      }
+    }
+    final saved = PlaybackProgressService.instance.getProgress(path);
+    if (saved == null || saved <= Duration.zero) return null;
+    if (listDuration != null &&
+        !shouldRestorePosition(
+          listDuration,
+          saved,
+          maxRestoreRatio: _settings.watchThreshold,
+        )) {
+      return null;
+    }
+    return saved;
+  }
+
+  /// 播放历史（工作.md：播放历史记录功能）：记录一次播放。
+  ///
+  /// 只记录**可重放**来源——本地真实路径与在线直链；loopback 代理 URL
+  /// （网络存储的 `127.0.0.1` 流，退出即失效）不写入（哔哩哔哩在线播放
+  /// 走 `_biliMedia` 分支，不经过本方法）。时长优先取播放列表
+  /// MediaStore 的 durationMs（open 前就可知），未知传 0 由退出时回填。
+  /// 过滤与写入逻辑由 [recordPlaybackHistory] 统一提供（B4/P1-3：竖屏页
+  /// 切集也走同一入口）。
+  void _recordPlaybackHistory(String path, String title) {
+    recordPlaybackHistory(
+      path,
+      title,
+      durationMs: _playlistDurationMsFor(path),
+    );
+  }
+
+  /// 从播放列表查该路径的 MediaStore 时长（毫秒；未知返回 0）
+  int _playlistDurationMsFor(String path) {
+    for (final v in _playlist) {
+      if (v.path == path && v.durationMs > 0) return v.durationMs;
+    }
+    return 0;
+  }
+
+  /// 打开媒体、设置倍速、应用超分着色器，并按需恢复进度。
+  ///
+  /// **恢复进度 v5 重写（用户反馈 v5：仍有 1–1.5s 开头闪现）**：
+  /// 弃用 `Media(start:)`（media_kit 1.2.x 的 on_load hook 读 playlist-pos
+  /// 时恒为 -1，start 从未生效），改用 [openAndRestore] 的**确定性恢复**：
+  /// 暂停加载 → 静音激活时间线 → seek → 位置确认，全程用不透明封层盖住
+  /// 视频，到位后再揭开 + 播放，首帧即目标帧，无开头闪现、无可见跳转。
+  ///
+  /// 之后按「视频方向」设置决定是否自动进入竖屏播放。
+  ///
+  /// 防销毁竞态（risk_audit #2）：initState 发起本流程但未 await，用户可能
+  /// 在其完成前退出——每个 await 之后先查 [_disposed]/mounted，播放器已
+  /// 销毁时静默返回，避免 AssertionError 写假崩溃日志。
+  Future<void> _openAndSetRate() async {
+    // 读取保存进度（ensureLoaded 防重启后读空缓存，见 §7 竞态修复）
+    await PlaybackProgressService.instance.ensureLoaded();
+    if (_disposed || !mounted) return;
+    // B 站在线播放：走双流 + 代理 + 弹幕 + 章节流程，不复用本地进度恢复
+    if (_biliMedia != null) {
+      await _openBiliMedia();
+      await _applyVideoOrientation();
+      return;
+    }
+    // 播放历史：记录本次播放（本地路径 / 在线直链；见方法注释的过滤规则）
+    _recordPlaybackHistory(_path, _title);
+    // mpv 缓存/网络调参：open 前写入（本地/在线两档，§4.26）
+    await _applyPlaybackTuning(_path);
+    if (_disposed || !mounted) return;
+    final start = _resumeStartFor(_path);
+    // 从头播（无进度 / 已看完 / 进度过少）＝ 用户重新看这个视频：解除「已看完」
+    // 粘性，让这次重看中途退出也能记录进度（B3，见 markCompleted/releaseCompleted）
+    if (start == null) {
+      PlaybackProgressService.instance.releaseCompleted(_path);
+    }
+    // 片头片尾：新媒体重置跟踪状态（open 期间位置事件不评估）
+    _introOutroTracker.reset();
+    // 恢复时先盖住视频：暂停加载 + seek 期间用户看不到 0 时刻海报
+    if (start != null && mounted) setState(() => _restoring = true);
+    var restored = false;
+    try {
+      restored = await openAndRestore(
+        _player,
+        _path,
+        saved: start,
+        // 倍速 + 超分/后处理在播放/seek 之前完成（避免 shader 变化重置位置）
+        prepare: () async {
+          await _player.setRate(_session.rate);
+          await _applyShaderPipeline();
+        },
+      );
+      if (_disposed || !mounted) return;
+      // 揭开封层（openAndRestore 已 seek 到位并开始播放）
+      if (mounted) setState(() => _restoring = false);
+      if (restored && start != null) {
+        _positionNotifier.value = start;
+        _showResumeIndicator();
+      }
+    } on AssertionError {
+      // 播放器已在打开过程中被销毁（快速退出→进入循环）：静默返回
+      return;
+    } finally {
+      // 恢复封层必须无条件揭掉（B3/P1-12）：旧实现只有成功路径清 `_restoring`，
+      // AssertionError 分支直接 return → 黑屏盖层永久卡住（要退出重进才好）。
+      if (mounted && _restoring) setState(() => _restoring = false);
+    }
+    if (_disposed || !mounted) return;
+    // 片头片尾：恢复点感知后标记就绪，位置事件开始评估
+    // （恢复点 > 0 时不跳片头；恢复点落在片尾时不立即切集）
+    if (restored && start != null) {
+      _introOutroTracker.markResumedPosition(start, _player.state.duration);
+    }
+    _introOutroTracker.markReady();
+    // 章节功能：open 完成后读取章节（此时时长已就绪；空章节静默清空）
+    unawaited(_chapterTracker.load());
+    // 字幕功能：open 完成后刷新轨道/重新添加外挂字幕/应用设置
+    unawaited(
+      _subtitleController.reapplyForMedia(_path, networkSource: _networkSource),
+    );
+    // 音频功能：open 完成后刷新音轨/同步当前音轨/应用声道与音频处理
+    unawaited(_audioController.reapplyForMedia(_path));
+    // 弹幕功能：open 完成后加载同目录同名弹幕（无匹配静默跳过）
+    unawaited(_danmakuController.loadForVideo(_path));
+    // 解码功能：链在 open **前**按渲染后端定好（`applyPlaybackTuning` →
+    // `preferredDecodeChain`）。这里**不再**读 `hwdec-current` 回退档位——
+    // 那是把「mpv 本次的兜底结果」误当设备结论，会永久改写用户选的档
+    // （对齐参照项目 MPVRX；见 utils/decode_policy.dart）。
+    // ⚠️ 顺序要求：方向流程必须在前——锁定竖屏/自动竖屏时它会 push 竖屏页
+    // （await 到竖屏页 pop），杜比检测要等 `_portraitActive` 落定后再决定
+    // 「本页检测」还是「让位给竖屏页」，否则弹窗会压在被盖住的页上、
+    // 或排在竖屏页 push 之前而被盖住（真机 B4 验证：锁定竖屏直接进杜比
+    // 视频没有引导，根因就是这里把检测排在了 push 之后）。
+    await _applyVideoOrientation();
+    // 杜比视界偏色检测 + 引导（本地文件，工作.md 迁移功能）
+    unawaited(_checkDolbyVision());
+  }
+
+  /// 杜比视界偏色检测与引导（工作.md 迁移功能）：本地文件播放到杜比视界
+  /// 视频、且未开 gpu-next 时，弹窗引导启用 gpu-next 或切换软解；支持
+  /// 「不再提示」记忆。
+  ///
+  /// B4/P1-6：检测 + 弹窗实现抽到 [showDolbyVisionHintIfNeeded]，竖屏页
+  /// 走同一函数（原先只有横屏检测，竖屏连看剧集时无提示）。
+  /// 去重按**媒体路径**记在共享会话状态里（横竖屏两条触发路径共用）。
+  Future<void> _checkDolbyVision() async {
+    // 竖屏页在栈顶时让位：由竖屏页检测并弹窗（弹窗要盖在竖屏页之上，
+    // 且此时本页被遮住、用户看不到）；本页在竖屏页 pop 后不再重复检测
+    // ——路径已被竖屏页认领，[PlayerSessionState.claimDolbyCheck] 会拦下。
+    if (_portraitActive) return;
+    if (!_session.claimDolbyCheck(_path)) return;
+    await showDolbyVisionHintIfNeeded(context, _path);
+  }
+
+  // 解码：链在 open **前**由 `applyPlaybackTuning` → `preferredDecodeChain`
+  // 按「用户档位 + 渲染后端」定一次（utils/decode_policy.dart）。
+  //
+  // 这里原先有一处 `_checkDecodeFallback`：开播后读 `hwdec-current`，发现实际
+  // 生效档低于所选档就改写全局设置 + toast。已删除，原因是它把 mpv 的**本次
+  // 兜底结果**当成设备级结论（`hwdec-current` 是每部视频当下生效的方法名，
+  // mpv 自己会按序降级），于是「硬解+」在直通没成的那一次之后被永久钉成
+  // 「硬解」，用户看到的是「什么视频都不支持硬解+」。对齐参照项目 MPVRX：
+  // 档位由用户定、mpv 内部尽力、界面如实显示 `hwdec-current`，谁都不回写设置。
+
+  // ── B 站在线播放（阶段三）──────────────────────────────
+
+  /// 当前画质音频流的本地代理 URL（外挂音轨用）；null = 无音轨。
+  String? _biliAudioUrl;
+
+  /// 打开 B 站媒体：本地代理注册 → 双流（video + 外挂 audio）→ 弹幕 → 章节。
+  /// [restoreTo] 非空时走 [openAndRestore] 的确定性恢复流程（等起播 → seek →
+  /// 确认 → 重试），切 4K/HDR 等高码率流也能可靠恢复到原进度。
+  Future<void> _openBiliMedia({Duration? restoreTo}) async {
+    // AB 循环：换集后上一集的 A/B 两点作废（mpv 的 ab-loop 属性会跨文件保留）
+    await _session.resetAbLoopForNewMedia();
+    final m = _biliMedia!;
+    final videoPath = await _registerBiliProxy(m);
+    // mpv 缓存/网络调参：B 站为在线来源（open 前写入，§4.26）
+    await _applyPlaybackTuning(videoPath);
+    await openAndRestore(
+      _player,
+      videoPath,
+      saved: restoreTo,
+      prepare: () async {
+        await _player.setRate(_session.rate);
+        await _applyShaderPipeline();
+      },
+      beforePlay: () async {
+        final audioPath = _biliAudioUrl;
+        if (audioPath != null && audioPath.isNotEmpty) {
+          final native = _player.platform as NativePlayer;
+          await native.command(['audio-add', audioPath, 'select']);
+        }
+      },
+    );
+    if (_disposed || !mounted) return;
+    _introOutroTracker.reset();
+    unawaited(_loadBiliDanmaku());
+    _loadBiliChapters();
+    // 解码功能：B 站流同样在 open 前定链（切画质会重开流）——不做事后回退，
+    // 理由见本页 `_checkDecodeFallback` 原先位置与 utils/decode_policy.dart
+  }
+
+  /// 注册 B 站流代理，返回视频本地 URL；音频本地 URL 存到 [_biliAudioUrl]。
+  /// 代理启动失败回退直连（此时 mpv 直接走 mbedTLS，可能失败）。
+  Future<String> _registerBiliProxy(BiliMedia m) async {
+    final headers = {
+      'Referer': BiliConstants.referer,
+      'User-Agent': BiliConstants.webUserAgent,
+    };
+    final reg = await BiliStreamProxy.instance.registerStreams(
+      videoUrl: m.videoUrl,
+      audioUrl: m.audioUrl,
+      headers: headers,
+    );
+    if (reg == null) {
+      _biliAudioUrl = m.audioUrl;
+      return m.videoUrl;
+    }
+    _biliAudioUrl = reg.audioUrl;
+    return reg.videoUrl;
+  }
+
+  /// 拉取 B 站原声弹幕（分段流式，先到先显）+ 落盘缓存。
+  Future<void> _loadBiliDanmaku() async {
+    final m = _biliMedia;
+    if (m == null) return;
+    final service = BiliDanmakuService();
+    final all = <DanmakuEntry>[];
+    await service.fetchDanmakuStreamed(
+      cid: m.cid,
+      aid: m.aid,
+      onBatch: (batch) {
+        if (_disposed || !mounted || _biliMedia != m) return;
+        final isFirst = all.isEmpty;
+        all.addAll(batch);
+        if (isFirst) {
+          _danmakuController.loadBiliDanmaku(batch);
+        } else {
+          _danmakuController.appendBiliDanmaku(batch);
+        }
+      },
+    );
+    if (_disposed || !mounted || _biliMedia != m) return;
+    if (all.isNotEmpty) {
+      // 静默缓存，不弹「已加载 N 条弹幕」提示（正常加载即可）
+      unawaited(service.cacheDanmaku(m.cid, all));
+    }
+  }
+
+  /// 把 playurl 的 OP/ED 跳段（`clip_info_list`）映射成章节 + 跳过片段，
+  /// 喂给 [ChapterTracker]（精确起止，不走关键词派生）。
+  void _loadBiliChapters() {
+    final m = _biliMedia;
+    if (m == null) {
+      _chapterTracker.setExternalChapters(const [], const []);
+      return;
+    }
+    debugPrint(
+      '[BILI-PLAY] chapters: clips=${m.clips.length} '
+      '[${m.clips.map((c) => '${c.clipType}@${c.startSeconds}-${c.endSeconds}').join(', ')}]',
+    );
+    final chapters = <ChapterInfo>[];
+    final segments = <SkipSegment>[];
+    for (final clip in m.clips) {
+      if (clip.startSeconds >= clip.endSeconds) continue;
+      if (clip.isOp) {
+        chapters.add(ChapterInfo(title: 'OP', startSeconds: clip.startSeconds));
+        segments.add(SkipSegment(
+          type: ChapterSkipType.intro,
+          startSeconds: clip.startSeconds,
+          endSeconds: clip.endSeconds,
+        ));
+      } else if (clip.isEd) {
+        chapters.add(ChapterInfo(title: 'ED', startSeconds: clip.startSeconds));
+        segments.add(SkipSegment(
+          type: ChapterSkipType.outro,
+          startSeconds: clip.startSeconds,
+          endSeconds: clip.endSeconds,
+        ));
+      }
+    }
+    _chapterTracker.setExternalChapters(chapters, segments);
+  }
+
+  /// 切换清晰度：重新解析 playurl → 重开流（保持进度）→ 更新章节。
+  ///
+  /// 返回**切换后的真实档位**（服务端按账号权限回落，`playUrl.quality` 是服务端
+  /// 实际给的），失败返回 null——面板据此收口高亮（§4.15/§7）。
+  ///
+  /// 两条回落纪律（用户拍板 2026-09）：
+  /// - 请求的档位没给到（如没 4K 权限却点 4K）→ toast 说明**已切到哪一档**，
+  ///   不让用户以为自己点了个寂寞；
+  /// - 回落到的档位**恰好就是当前在播的档位** → 流没变，**不重开**（重开会黑
+  ///   一下 + 进度回跳），只把面板高亮纠正到真实档位。
+  Future<int?> _switchQuality(int qn) async {
+    final l10n = AppLocalizations.of(context);
+    final m = _biliMedia;
+    if (m == null || m.currentQn == qn) return null;
+    final position = _position;
+    try {
+      final next = await m.switchQuality(qn);
+      if (_disposed || !mounted) return null;
+      if (next.currentQn != qn) {
+        _toast(
+          l10n.playerQualityUnavailableSwitched(_currentQualityDescription(next)),
+        );
+      }
+      if (next.currentQn == m.currentQn) return next.currentQn;
+      setState(() => _biliMedia = next);
+      await _openBiliMedia(
+        restoreTo: position > Duration.zero ? position : null,
+      );
+      return next.currentQn;
+    } catch (e) {
+      if (mounted) _toast(l10n.playerQualitySwitchFailed('$e'));
+      return null;
+    }
+  }
+
+  /// 当前清晰度描述（更多面板副标题）。
+  String _currentQualityDescription(BiliMedia m) {
+    for (final q in m.qualities) {
+      if (q.qn == m.currentQn) return q.description;
+    }
+    return '${m.currentQn}P';
+  }
+
+  /// 清晰度面板页。
+  PlayerPanelPage _qualityPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).commonQuality,
+        body: _biliMedia == null
+            ? const SizedBox.shrink()
+            : PlayerQualityPanel(
+                qualities: _biliMedia!.qualities,
+                currentQn: _biliMedia!.currentQn,
+                onSelect: _switchQuality,
+              ),
+      );
+
+  // ── 方向策略：跟随手机方向（重力感应）─────────────────────
+
+  /// 本次播放是否跟随手机方向（设置开关 + 「自动」+ 系统「自动旋转」，
+  /// 三者同时成立才生效，见 [shouldFollowPhoneOrientation]）
+  bool get _shouldFollowPhoneOrientation => shouldFollowPhoneOrientation(
+        mode: _settings.videoOrientation,
+        followPhoneRotation: _settings.followPhoneRotation,
+        systemAutoRotate: DeviceServices.cachedAutoRotateEnabled,
+      );
+
+  /// 进入播放页的方向（initState 发起，与 open 并行）。
+  ///
+  /// - 跟随手机方向 / 锁定竖屏 / 锁定横屏：设置说了算，直接锁；
+  /// - 自动：先**原生预读**本地文件头（宽高 + 旋转角），直接锁正确方向——
+  ///   这是「竖屏视频先横屏再转竖屏」的修法（参考实现 mpvRx 也是进页前先定）。
+  ///   预读期间**先把窗口钉在当前方向**：否则这几十毫秒里系统自动旋转 /
+  ///   重力可能把窗口转走，用户照样看到一次多余的旋转。
+  ///
+  /// 预读拿不到（网络存储 / 在线流 / 不支持的容器）就按老路先锁横屏，
+  /// open 完成后由 [_applyVideoOrientation] 用播放器上报的 videoParams 纠正。
+  Future<void> _applyInitialOrientation() async {
+    if (_followPhoneRotation ||
+        _settings.videoOrientation != VideoOrientationMode.auto) {
+      await PlayerOrientation.apply(_initialOrientations());
+      return;
+    }
+    await PlayerOrientation.apply(_currentWindowOrientations());
+    if (_disposed || !mounted || _exiting) return;
+    final probe = await DeviceServices.probeVideoOrientation(_path);
+    if (_disposed || !mounted || _exiting) return;
+    // 预读期间 [_refreshAutoRotateCache] 可能把「跟随手机方向」纠正为开启
+    // （启动时缓存的系统自动旋转开关可能是旧的）：那时方向已交还系统，
+    // 这里不能再钉一个方向，否则跟随会被这次预读悄悄按死
+    if (_followPhoneRotation) return;
+    final portrait = isPortraitDisplay(
+      width: probe?.width ?? 0,
+      height: probe?.height ?? 0,
+      rotation: probe?.rotation ?? 0,
+    );
+    _initialPortraitLocked = portrait ?? false;
+    await PlayerOrientation.apply(
+      _initialPortraitLocked
+          ? PlayerOrientation.portrait
+          : PlayerOrientation.landscape,
+    );
+  }
+
+  /// 当前窗口方向对应的锁（预读期间钉住窗口用）。
+  /// 读不到窗口尺寸（极罕见）就交还系统，不硬钉一个方向。
+  List<DeviceOrientation> _currentWindowOrientations() {
+    final size =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.physicalSize;
+    if (size == null || size.isEmpty) return PlayerOrientation.appDefault;
+    return size.height > size.width
+        ? PlayerOrientation.portrait
+        : PlayerOrientation.landscape;
+  }
+
+  /// 非「自动」模式（跟随手机方向 / 锁定竖屏 / 锁定横屏）的进入方向
+  List<DeviceOrientation> _initialOrientations() {
+    if (_followPhoneRotation) return PlayerOrientation.appDefault;
+    return _settings.videoOrientation == VideoOrientationMode.portrait
+        ? PlayerOrientation.portrait
+        : PlayerOrientation.landscape;
+  }
+
+  /// 引擎上报的当前窗口是否竖屏。
+  ///
+  /// 直接问引擎视图要尺寸，不读 MediaQuery：[didChangeMetrics] 触发时
+  /// MediaQuery 还是上一帧的旧尺寸，旧尺寸会让「就是这次旋转」的判断漏掉。
+  bool get _windowIsPortrait {
+    final size =
+        WidgetsBinding.instance.platformDispatcher.implicitView?.physicalSize;
+    if (size == null || size.isEmpty) {
+      final media = MediaQuery.maybeOf(context);
+      return media != null && media.size.height > media.size.width;
+    }
+    return size.height > size.width;
+  }
+
+  /// 跟随手机方向：把页面与当前窗口方向对齐（竖屏窗口 → 竖屏播放页；
+  /// 横屏窗口由竖屏页自己 pop 回本页）。
+  ///
+  /// 不只在 [didChangeMetrics] 里对齐：手工点「选择屏幕」回来、从听视频页
+  /// 返回、App 回前台等路径下窗口方向可能没变化，但页面需要重新对齐。
+  Future<void> _syncPageWithPhoneOrientation() async {
+    if (!_followPhoneRotation || !mounted || _disposed || _exiting) return;
+    if (!_windowIsPortrait || _portraitActive) return;
+    await _openPortraitPlayer(followPhone: true);
+  }
+
+  /// 异步刷新系统「自动旋转」缓存，结果与本次决定不一致时纠正方向策略。
+  ///
+  /// 用户可能在通知栏快捷开关里改过它——那不会触发 App 生命周期回调，
+  /// 启动时缓存的值可能已经过期。
+  Future<void> _refreshAutoRotateCache() async {
+    await DeviceServices.refreshAutoRotate();
+    if (_disposed || !mounted || _exiting) return;
+    final follow = _shouldFollowPhoneOrientation;
+    if (follow == _followPhoneRotation) return;
+    _followPhoneRotation = follow;
+    await PlayerOrientation.apply(
+      follow ? PlayerOrientation.appDefault : PlayerOrientation.landscape,
+    );
+    if (_disposed || !mounted || _exiting) return;
+    if (follow) {
+      await _syncPageWithPhoneOrientation();
+    } else if (!_portraitActive) {
+      // 改回不跟随：交给「视频方向」逻辑重新定页面
+      await _applyVideoOrientation();
+    }
+  }
+
+  /// 视频方向（工作.md 第 5 点）：
+  /// - 跟随手机方向：方向交还系统，页面按窗口方向对齐（不看视频方向）；
+  /// - 锁定横屏：保持横屏（不动作）；
+  /// - 锁定竖屏：自动进入竖屏播放页（共享同一 Player，音频零中断）；
+  /// - 自动：按视频方向（宽高比）决定横/竖屏。
+  ///
+  /// 正常情况下方向早在 [_applyInitialOrientation] 的预读里定好了，这里只做
+  /// **兜底与纠正**：预读拿不到（网络源 / 在线流）时按播放器上报定方向；
+  /// 预读与播放器判定相反时纠回（否则会卡在错的方向里）。
+  ///
+  /// 防销毁竞态（risk_audit #2）：`_isPortraitVideo` 可能等待播放器
+  /// videoParams 流，期间用户退出则播放器已销毁——抛 AssertionError 时
+  /// 静默返回，不写假崩溃日志。
+  Future<void> _applyVideoOrientation() async {
+    // 跟随手机方向：横竖屏由手机方向决定（进入时窗口已是竖屏 → 直接进竖屏页）
+    if (_followPhoneRotation) {
+      await _syncPageWithPhoneOrientation();
+      return;
+    }
+    if (_settings.videoOrientation == VideoOrientationMode.landscape) return;
+    try {
+      final portrait =
+          _settings.videoOrientation == VideoOrientationMode.portrait ||
+              await _isPortraitVideo();
+      if (!portrait) {
+        // 预读说竖屏、播放器说横屏（文件头与 mpv 不一致）：纠回横屏
+        await _relockLandscapeIfProbeWasWrong();
+        return;
+      }
+      // 已在竖屏页（用户手动切过）或已开始退出时不再自动 push
+      if (!mounted || _portraitActive || _exiting || _disposed) return;
+      // 先切方向再进竖屏页，避免先横屏闪一下再旋转
+      await PlayerOrientation.apply(PlayerOrientation.portrait);
+      await _openPortraitPlayer();
+    } on AssertionError {
+      // 播放器已被销毁（快速退出）：静默返回
+    }
+  }
+
+  /// 预读把窗口锁成竖屏、但播放器判定是横屏时的兜底纠回（只在预读出错那
+  /// 条路上走到）：不纠的话用户会一直卡在竖屏窗口里播横屏视频。
+  ///
+  /// 用户已手动接管（竖屏页在栈顶 / 听视频页）或「视频方向」不再是自动
+  /// （用户明确指定了方向）时不动。
+  Future<void> _relockLandscapeIfProbeWasWrong() async {
+    if (!_initialPortraitLocked) return;
+    _initialPortraitLocked = false;
+    if (_settings.videoOrientation != VideoOrientationMode.auto) return;
+    if (!mounted || _disposed || _exiting) return;
+    if (_portraitActive || _audioActive.value) return;
+    await PlayerOrientation.apply(PlayerOrientation.landscape);
+  }
+
+  /// 判断当前视频是否为竖屏，**结合旋转元数据**（工作.md 第 5 点，参考小喵 KT：
+  /// `video-params/aspect` + `video-params/rotate`）。手机竖拍视频常见
+  /// 「编码尺寸为横屏 + rotation 90/270」，直接按编码宽高判断会误判为横屏。
+  ///
+  /// 实现要点（与 KT 一致的算法）：
+  /// - 用 [VideoParams] 的**原始 w/h**（未经 aspect/旋转修正）与 rotate；
+  ///   ⚠️ 不要用 `state.width/height`——media_kit 已把它们按 rotate 交换成
+  ///   显示尺寸，若再套用 rotate 会**双重交换**导致误判（上一轮 bug 根因）；
+  /// - rotate 为 90/270 时显示方向互换（aspect = 1/aspect），宽高比 ≤ 1 即竖屏。
+  ///
+  /// 优先等播放器上报（最多 2 秒）；仍未知再用播放列表里的分辨率
+  /// （MediaStore，无旋转信息，仅作近似）。
+  Future<bool> _isPortraitVideo() async {
+    final (w, h, rotate) = await _waitVideoSize();
+    final portrait = isPortraitDisplay(width: w, height: h, rotation: rotate);
+    if (portrait != null) return portrait;
+    final list = _playlist;
+    for (final v in list) {
+      if (v.path == _path && v.width > 0 && v.height > 0) {
+        return v.height > v.width;
+      }
+    }
+    return false;
+  }
+
+  /// 等待播放器上报**原始**画面尺寸与旋转角（videoParams 流的 w/h/rotate，
+  /// 未经 aspect/旋转修正），最多 [timeout]。返回 `(宽, 高, 旋转角)`；
+  /// 超时返回 `(0, 0, 0)`。
+  /// 播放器已销毁时（快速退出）抛 AssertionError，由调用方捕获静默处理。
+  Future<(int, int, int)> _waitVideoSize({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final params = _player.state.videoParams;
+    final w0 = params.w;
+    final h0 = params.h;
+    final rotate0 = params.rotate ?? 0;
+    if (w0 != null && w0 > 0 && h0 != null && h0 > 0) {
+      return (w0, h0, rotate0);
+    }
+    final completer = Completer<(int, int, int)>();
+    late final StreamSubscription<VideoParams> sub;
+    sub = _player.stream.videoParams.listen((p) {
+      // 用原始 w / h（非 aspect 修正、非 rotate 交换），rotate 单独取
+      if (p.w != null && p.w! > 0 && p.h != null && p.h! > 0 &&
+          !completer.isCompleted) {
+        completer.complete((p.w!, p.h!, p.rotate ?? 0));
+      }
+    });
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete((0, 0, 0));
+    });
+    final size = await completer.future;
+    timer.cancel();
+    await sub.cancel();
+    return size;
+  }
+
+  /// 退出播放时恢复设备状态（实现见 [PlayerSessionState.restoreToDevice]）：
+  /// - 亮度：恢复 -1（交还系统控制 = 进入播放前的状态）；
+  /// - 音量：手势已直控系统音量（v3 语义）——开启「保存到系统」保持当前值；
+  ///   关闭 → 恢复进入前的系统音量；
+  /// - 音量增强：mpv 增益复位 100 防泄漏。
+  ///
+  /// B4/D2：原先这套逻辑与竖屏页各一份（竖屏手势改动本页看不到 → 退出时
+  /// 可能写回过期音量），现统一在共享会话状态里。
+  Future<void> _restoreDeviceState() => _session.restoreToDevice();
+
+  /// 进入沉浸式全屏：隐藏状态栏/导航栏，并把系统栏设为透明
+  /// （即使系统栏短暂出现，也是透明的，不会露出浅色背景）
+  void _enterFullscreen() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+  }
+
+  // ── 应用生命周期（退后台 / 听视频相关）──────────────────
+
+  /// 窗口尺寸/方向变化：跟随手机方向时按新方向对齐页面。
+  ///
+  /// 跟随开着时本页没有锁定方向（方向交还系统），窗口转成竖屏就切到竖屏
+  /// 播放页；转回横屏由竖屏页自己 pop 回来（见 PlayerPortraitPage）。
+  ///
+  /// 只在 App 处于前台时响应：画中画小窗（16:9 横屏窗口）也是「窗口尺寸变化」，
+  /// 在竖屏页里按尺寸判断会把小窗当成横屏、把竖屏页 pop 掉（返回全屏后布局
+  /// 被悄悄换掉）。
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!_followPhoneRotation) return;
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    unawaited(_syncPageWithPhoneOrientation());
+  }
+
+  /// 应用生命周期变化（**只关乎控制层显隐**，不涉及"自动进小窗"）：
+  /// - 退后台（`paused`/`hidden`，含从显式「画中画」按钮进小窗、被系统
+  ///   小窗切走）：隐藏控制层（小窗/后台期间不显示控制，播放保持）；
+  /// - 返回前台（小窗关闭返回 / 从后台切回）：恢复控制层并重置隐藏计时。
+  ///
+  /// ⚠️ 本项目设计上**不**做「按 Home 自动进画中画」：`setAutoPipEnabled`
+  /// 全仓零调用，按 Home 一律退后台并暂停；画中画只有一个入口——顶栏槽位／
+  /// 「更多」里的显式「画中画」按钮（[_enterPip] 自己先隐藏控制层）。
+  /// 原生侧没有小窗事件回传通道，故这里用 `AppLifecycleState` 兜底判定。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _hideTimer?.cancel();
+        if (mounted && _controlsVisible && !_locked) {
+          setState(() => _controlsVisible = false);
+          _controlsController.reverse();
+        }
+      case AppLifecycleState.resumed:
+        if (mounted && !_locked && !_controlsVisible) {
+          setState(() => _controlsVisible = true);
+          _controlsController.forward();
+        }
+        _resetHideTimer();
+      default:
+        break;
+    }
+  }
+
+  // ── 控制层显隐 ──────────────────────────────────────────
+
+  void _resetHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(kPlayerAutoHideDelay, () {
+      if (mounted && _playing && !_locked) {
+        setState(() => _controlsVisible = false);
+        _controlsController.reverse();
+      }
+    });
+  }
+
+  /// 解锁按钮呼出后启动自动收回计时（[kPlayerAutoHideDelay] 后滑出）
+  void _resetUnlockHideTimer() {
+    _unlockHideTimer?.cancel();
+    _unlockHideTimer = Timer(kPlayerAutoHideDelay, () {
+      // 期间已解锁（或页面已销毁）就不再动它
+      if (mounted && _locked) _unlockController.reverse();
+    });
+  }
+
+  /// 显式呼出控制层（「自动暂停停在结尾」用）。
+  ///
+  /// 播完引起的暂停在 [shouldRevealControlsOnPause] 里一律不呼出；自动暂停
+  /// 停在结尾是唯一例外——它确实停在末尾，用户需要看到中央播放键。
+  void _revealControls() {
+    if (!mounted || _locked || _exiting) return;
+    setState(() => _controlsVisible = true);
+    _controlsController.forward();
+  }
+
+  void _toggleControls() {
+    // 锁定时单击：呼出/隐藏左右解锁按钮（带滑入滑出动画）
+    if (_locked) {
+      if (_unlockController.status == AnimationStatus.forward ||
+          _unlockController.status == AnimationStatus.completed) {
+        _unlockHideTimer?.cancel(); // 手动收起：撤销待执行的自动收回
+        _unlockController.reverse();
+      } else {
+        _unlockController.forward();
+        _resetUnlockHideTimer();
+      }
+      return;
+    }
+    final visible = !_controlsVisible;
+    setState(() => _controlsVisible = visible);
+    if (visible) {
+      _controlsController.forward();
+      _resetHideTimer();
+    } else {
+      _controlsController.reverse();
+      _hideTimer?.cancel();
+    }
+  }
+
+  // ── 锁定 / 解锁 ─────────────────────────────────────────
+
+  void _toggleLock() {
+    setState(() => _locked = !_locked);
+    if (_locked) {
+      // 锁定：隐藏全部控制，左右滑入解锁按钮（随后自动收回，可单击再呼出）
+      _hideTimer?.cancel();
+      if (_controlsVisible) {
+        _controlsVisible = false;
+        _controlsController.reverse();
+      }
+      _unlockController.forward();
+      _resetUnlockHideTimer();
+    } else {
+      // 解锁：解锁按钮滑出，恢复控制层
+      _unlockHideTimer?.cancel();
+      _unlockController.reverse();
+      _controlsVisible = true;
+      _controlsController.forward();
+      _resetHideTimer();
+    }
+  }
+
+  void _unlock() => _toggleLock();
+
+  /// 接住竖屏页离开前交回的状态（控制层显隐 + 锁定）。
+  ///
+  /// 重力切换只是换一个布局渲染同一路画面，控制层显隐与锁定属于「本次播放」
+  /// 而不是某一页：不接住的话每次重力切换都会切过去自动呼出控制层、切回横屏
+  /// 又消失地抖一次（用户反馈），锁定也会在旋转时被悄悄解掉。
+  ///
+  /// 本页此刻刚露出来（或被竖屏页盖着），直接归位、不走 250ms 进出场动画。
+  void _onPortraitStateReport({
+    required bool controlsVisible,
+    required bool locked,
+  }) {
+    if (!mounted || _disposed || _exiting) return;
+    setState(() {
+      _locked = locked;
+      _controlsVisible = locked ? false : controlsVisible;
+    });
+    _hideTimer?.cancel();
+    _unlockHideTimer?.cancel();
+    // 锁定态：解锁按钮从「收起」开始（单击屏幕呼出，与锁定后的常态一致）
+    _unlockController.value = 0;
+    _controlsController.value = _controlsVisible ? 1 : 0;
+    if (_controlsVisible) _resetHideTimer();
+  }
+
+  // ── 截图 ────────────────────────────────────────────────
+
+  Future<void> _takeScreenshot() async {
+    final l10n = AppLocalizations.of(context);
+    Uint8List? bytes;
+    try {
+      bytes = await _player.screenshot(format: 'image/png');
+    } catch (e) {
+      _toast(l10n.playerScreenshotFailed('$e'));
+      return;
+    }
+    if (bytes == null || bytes.isEmpty) {
+      _toast(l10n.playerScreenshotNoImage);
+      return;
+    }
+    try {
+      final name = formatScreenshotName(DateTime.now());
+      final result = await SaverGallery.saveImage(
+        bytes,
+        fileName: name,
+        albumPath: '小喵Player',
+        skipIfExists: false,
+      );
+      _toast(result.isSuccess
+          ? l10n.playerSavedToGallery
+          : l10n.playerScreenshotSaveFailed('${result.errorMessage}'));
+    } catch (e) {
+      _toast(l10n.playerScreenshotSaveFailed('$e'));
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1500),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  /// 播放 / 暂停（中央按钮与双击手势共用）。
+  ///
+  /// [fromDoubleTap]：双击**暂停**时不呼出控制层（见
+  /// [_suppressControlsOnNextPause]）；双击恢复播放不受影响。
+  Future<void> _togglePlay({bool fromDoubleTap = false}) async {
+    if (fromDoubleTap && _playing) _suppressControlsOnNextPause = true;
+    await _player.playOrPause();
+    _resetHideTimer();
+  }
+
+  // ── 手势 ────────────────────────────────────────────────
+
+  /// 双击手势（暂停 / 左退右进 / 混合，跟随设置）。
+  ///
+  /// 锁定态由 [resolveDoubleTap] 统一裁决：默认拦截（防误触），开启「锁定
+  /// 状态豁免双击」后只放行播放/暂停，快进快退与其余手势依旧全部拦截。
+  /// 锁定下的双击**不碰控制层与解锁按钮**：暂停时 `playing` 流的「显示控制层」
+  /// 分支有 `!_locked` 守卫，解锁按钮的显隐也不会被双击改变（双击赢得竞技场，
+  /// 单击回调根本不触发）。
+  void _handleDoubleTap(double dx, double width) {
+    final gesture = resolveDoubleTap(
+      locked: _locked,
+      lockExempt: _settings.lockGestureExempt,
+      dx: dx,
+      width: width,
+      mode: _settings.doubleTapMode,
+    );
+    switch (gesture) {
+      case null:
+        return;
+      case DoubleTapGesture.pauseToggle:
+        _togglePlay(fromDoubleTap: true);
+      case DoubleTapGesture.seekBackward:
+        _seekBy(-_settings.seekSeconds);
+      case DoubleTapGesture.seekForward:
+        _seekBy(_settings.seekSeconds);
+    }
+  }
+
+  // ── 音量 / 亮度手势（左侧亮度，右侧音量）───────────────
+  //
+  // B4/D2：音量（含音量增强段）、亮度的手势数学与状态全部收敛到共享会话
+  // 状态 [PlayerSessionState.verticalSwipe]，横竖屏两页调用同一实现——竖屏页
+  // 不再出现「没有增强段 / 指示器谎报响度」（P1-1）。
+
+  /// 指示器显隐：显示 [kind] 对应指示器，2 秒无操作自动隐藏
+  void _showIndicator(
+    GestureIndicatorKind kind,
+    double value, {
+    bool boosting = false,
+  }) {
+    _indicatorHideTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _indicatorKind = kind;
+        _indicator = (kind: kind, value: value, boosting: boosting);
+      });
+    }
+    _indicatorHideTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _indicator = null);
+    });
+  }
+
+  void _onVerticalSwipe(double dyDelta, bool isLeftHalf) {
+    if (_locked) return;
+    final event = _session.verticalSwipe(dyDelta, isLeftHalf, _viewportHeight);
+    if (event == null) return;
+    _showIndicator(event.kind, event.value, boosting: event.boosting);
+  }
+
+  // ── 水平滑动 seek ──────────────────────────────────────
+  //
+  // B4/D2：状态与节流/撤销逻辑收敛到共享会话状态（横竖屏同一实现，
+  // P1-4：竖屏页原先传 `onSwipeCancel: () {}`，误触 seek 不撤销）。
+
+  void _onSwipeStart() {
+    if (_locked) return;
+    _session.beginSwipe();
+    _hideTimer?.cancel();
+  }
+
+  void _onHorizontalSwipe(double totalDx) {
+    if (_locked) return;
+    _session.updateSwipe(totalDx, _viewportWidth);
+  }
+
+  void _onSwipeEnd() {
+    _session.endSwipe();
+    _resetHideTimer();
+  }
+
+  /// 单指滑动被双指手势打断（意图改为缩放）：撤销已发生的 seek，
+  /// 避免「缩放时误触发左右滑动」
+  void _onSwipeCancel() {
+    if (_locked) return;
+    _session.cancelSwipe();
+  }
+
+  // ── 长按倍速 ───────────────────────────────────────────
+
+  void _onLongPressStart(Offset pos) {
+    if (_locked) return;
+    _longPressStartPos = pos;
+    _longPressSpeed = _settings.longPressSpeed;
+    _dynamicStartIndex = nearestSpeedPresetIndex(
+      _settings.longPressSpeed,
+      dynamicSpeedPresets(),
+    );
+    _dynamicSpeedActive = false;
+    _speedBarVisible = false;
+    _longPressing = true;
+    // 临时倍速只改播放器，不改用户选定倍速（恢复基准由共享状态保管，P1-2）
+    _session.applyTemporaryRate(_longPressSpeed);
+    _hideTimer?.cancel(); // 长按期间不自动隐藏控制层
+    if (mounted) setState(() {});
+  }
+
+  /// 长按期间左右滑动：临时调整长按倍速（1.5 – 4.0，间隔 0.5，离散）
+  void _onLongPressUpdate(Offset pos) {
+    final start = _longPressStartPos;
+    if (start == null || !_longPressing || _locked) return;
+    if (_viewportWidth <= 0) return;
+    final presets = dynamicSpeedPresets();
+    final dx = pos.dx - start.dx;
+    final newIndex = dynamicSpeedIndex(
+      dx,
+      _viewportWidth,
+      _dynamicStartIndex,
+      presets.length,
+    );
+    final newSpeed = presets[newIndex];
+    if ((newSpeed - _longPressSpeed).abs() < 0.01) return;
+    _longPressSpeed = newSpeed;
+    _session.applyTemporaryRate(newSpeed);
+    _dynamicSpeedActive = true;
+    _speedBarVisible = true;
+    // 首次完成「长按 + 左右滑动」：永久标记，后续不再出现提示
+    _settings.markSpeedHintShown();
+    // 停在某档位 3 秒后自动隐藏倍速条
+    _speedBarTimer?.cancel();
+    _speedBarTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _speedBarVisible = false);
+    });
+    if (mounted) setState(() {});
+  }
+
+  void _onLongPressEnd() {
+    if (!_longPressing) return;
+    _longPressing = false;
+    _speedBarTimer?.cancel();
+    _speedBarVisible = false;
+    _dynamicSpeedActive = false;
+    // 恢复用户选定倍速（共享状态里的唯一真值）
+    _longPressStartPos = null;
+    _session.restoreRateAfterTemporary();
+    if (mounted) setState(() {});
+    _resetHideTimer();
+  }
+
+  // ── 双指缩放 / 平移 ────────────────────────────────────
+  //
+  // B4/D6：缩放状态与矩阵收敛到共享会话状态（竖屏页与横屏同口径：
+  // 0.75–4x、可禁缩小、双指焦点锚定 + 焦点位移平移、边界不露黑边）。
+
+  void _onZoomStart() {
+    if (_locked) return;
+    _session.zoomStart();
+    _hideTimer?.cancel();
+  }
+
+  void _onZoomUpdate(ScaleUpdateDetails d) {
+    if (_locked) return;
+    _session.zoomUpdate(
+      d,
+      viewportWidth: _viewportWidth,
+      viewportHeight: _viewportHeight,
+    );
+  }
+
+  void _onZoomEnd() {
+    _session.zoomEnd();
+    _resetHideTimer();
+  }
+
+  void _resetZoom() => _session.resetZoom();
+
+  // ── 进度条缩略图预览 ───────────────────────────────────
+
+  /// 拖动进度条时请求对应时刻的画面。
+  ///
+  /// 两级策略（快速拖动也能即时出图）：
+  /// 1. 先查内存缓存中的「最近已解码帧」——命中即秒显（时间胶囊仍显示
+  ///    拖动位置，画面是最近帧，精确帧到了再替换）；
+  /// 2. 无覆盖时显示加载占位，再走精确解码（FFmpeg 快速引擎 ~85ms）。
+  void _requestThumbnail(int ms) {
+    if (!_settings.showThumbnailPreview) return;
+    if (_duration <= Duration.zero || _path.isEmpty) return;
+    // 新拖动开始：终止空闲预取（预取与新请求共享单飞队列，无需其他处理）
+    _cancelThumbPrefetch();
+    final clamped = ms.clamp(0, _duration.inMilliseconds);
+    final bucket = DeviceServices.thumbnailBucketMs(clamped);
+    if (bucket == _lastThumbBucketMs) return;
+    _lastThumbBucketMs = bucket;
+    _thumbFraction = _duration.inMilliseconds > 0
+        ? clamped / _duration.inMilliseconds
+        : 0;
+
+    // 1) 最近已解码帧即时显示（同一区域来回拖动零解码）
+    final nearest = DeviceServices.peekNearestFrame(
+      _path,
+      bucket,
+      maxGapMs: 3000,
+    );
+    if (nearest != null) {
+      setState(() {
+        _thumbPreview =
+            (frame: nearest.frame, time: Duration(milliseconds: bucket));
+        _thumbVisible = true;
+      });
+      // 精确桶已缓存或已跳过，则无需再取
+      if (DeviceServices.peekFrame(_path, bucket) != null) return;
+      _fetchThumbnail(bucket);
+      return;
+    }
+
+    // 2) 无覆盖：占位 + 精确解码
+    setState(() {
+      _thumbPreview = (frame: null, time: Duration(milliseconds: bucket));
+      _thumbVisible = true;
+    });
+    _fetchThumbnail(bucket);
+  }
+
+  /// 精确桶异步取帧（失败/过期自动丢弃）
+  void _fetchThumbnail(int bucket) {
+    DeviceServices.getVideoFrameAt(_path, bucket).then((frame) {
+      if (!mounted || frame == null) return;
+      // 已拖到别的秒：丢弃过期帧（_lastThumbBucketMs 只记录最新请求）
+      if (_lastThumbBucketMs != bucket) return;
+      setState(() {
+        _thumbPreview = (frame: frame, time: Duration(milliseconds: bucket));
+      });
+    });
+  }
+
+  /// 松手：气泡淡出（150ms 动画）后再卸载，避免硬切闪烁
+  void _hideThumbPreview() {
+    _thumbHideTimer?.cancel();
+    if (_thumbPreview == null) return;
+    setState(() => _thumbVisible = false);
+    _thumbHideTimer = Timer(const Duration(milliseconds: 150), () {
+      // 期间又开始了新一轮拖动（_thumbVisible 被置回 true）则不清
+      if (!mounted || _thumbVisible) return;
+      setState(() {
+        _thumbPreview = null;
+        _lastThumbBucketMs = -1;
+      });
+    });
+  }
+
+  /// 立即清空缩略图预览（切集/退出时调用，需处于 setState 内或随后触发重建）
+  void _clearThumbnail() {
+    _thumbHideTimer?.cancel();
+    _cancelThumbPrefetch();
+    _thumbPreview = null;
+    _thumbVisible = false;
+    _lastThumbBucketMs = -1;
+  }
+
+  // ── 空闲预取邻近秒桶（对齐 mpvRx：松手停住后后台补附近帧）──
+
+  Timer? _thumbPrefetchTimer;
+  int _thumbPrefetchGen = 0;
+
+  void _cancelThumbPrefetch() {
+    _thumbPrefetchTimer?.cancel();
+    _thumbPrefetchTimer = null;
+    _thumbPrefetchGen++;
+  }
+
+  /// 松手停住 350ms 后，把 [bucketMs] 附近 ±1/±2/±3 秒的秒桶串行补进
+  /// 内存缓存（每帧 ~85ms，共 6 帧）——再次拖到附近秒显。
+  /// 用户重新拖动（onChanged 会取消）/ 切集 / 退出立即终止；
+  /// 与实时抓帧共享单飞队列与缓存去重，不重复解码、不抢优先级
+  /// （新拖动请求会顶掉排队中的预取）。
+  void _scheduleThumbPrefetch(int bucketMs) {
+    _cancelThumbPrefetch();
+    final gen = _thumbPrefetchGen;
+    _thumbPrefetchTimer = Timer(const Duration(milliseconds: 350), () async {
+      for (final delta in const [1000, -1000, 2000, -2000, 3000, -3000]) {
+        if (!mounted || gen != _thumbPrefetchGen) return;
+        // 用户又开始拖动 → 立即终止
+        if (_dragPosition != null) return;
+        if (!_settings.showThumbnailPreview) return;
+        final b = bucketMs + delta;
+        if (b < 0) continue;
+        if (DeviceServices.peekFrame(_path, b) != null) continue;
+        await DeviceServices.getVideoFrameAt(_path, b);
+      }
+    });
+  }
+
+  Future<void> _seekBy(int seconds) async {
+    final total = _duration.inMilliseconds;
+    final target = (_position + Duration(seconds: seconds))
+        .inMilliseconds
+        .clamp(0, total);
+    await _player.seek(Duration(milliseconds: target));
+    _showSeekFeedback(seconds >= 0 ? '+$seconds' : '$seconds');
+    _resetHideTimer();
+  }
+
+  /// 双击快进/快退的顶部徽章反馈（控制层隐藏时也显示）
+  void _showSeekFeedback(String text) {
+    _seekFeedbackTimer?.cancel();
+    if (mounted) setState(() => _seekFeedback = text);
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _seekFeedback = null);
+    });
+  }
+
+  // ── 弹幕（阶段2：显示/隐藏 + 本地加载 + 设置面板）──────────────
+
+  /// 弹幕开关（底栏按钮 / 顶栏「弹幕」槽位共用）：关闭时清屏并作废在途
+  /// 发射，开启后从当前位置继续
+  void _toggleDanmaku() {
+    _danmakuController.toggle();
+    _resetHideTimer();
+  }
+
+  /// 弹幕设置：打开弹幕设置面板（右侧滑入，[showPlayerPanel]）。
+  /// 横屏左下角时间右侧的弹幕设置按钮 / 更多→弹幕→弹幕设置进入同一面板。
+  Future<void> _openDanmakuSettingsPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(
+      context,
+      pages: [
+        PlayerPanelPage(
+          title: AppLocalizations.of(context).playerDanmakuSettings,
+          body: const PlayerDanmakuSettingsPanel(),
+        ),
+      ],
+    );
+    _resetHideTimer();
+  }
+
+  // ── 片头片尾 ─────────────────────────────────────────────
+
+  /// 片头片尾面板页（顶栏「片头片尾」槽位弹出）
+  PlayerPanelPage _introOutroPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionIntroOutro,
+        body: PlayerIntroOutroPanel(
+          positionListenable: _positionNotifier,
+          durationListenable: _durationNotifier,
+        ),
+      );
+
+  /// 打开片头片尾设置面板（右侧滑入，[showPlayerPanel]）。
+  Future<void> _openIntroOutroPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_introOutroPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 片头片尾自动跳过：位置流每次更新调用（横屏页在竖屏/听视频
+  /// 打开期间让位，见位置流订阅处的门控）。
+  ///
+  /// - 跳过片头：seek 到片头结束并提示；
+  /// - 跳过片尾：提示并自动播放下一集（[resolveIntroOutroAction] 已
+  ///   保证存在下一集才产生此动作）。
+  void _handleIntroOutroPosition(Duration p) {
+    final action = _introOutroTracker.onPositionChanged(
+      p,
+      _durationNotifier.value,
+      hasNext: _hasNext,
+    );
+    switch (action) {
+      case IntroOutroAction.none:
+        break;
+      case IntroOutroAction.skipIntro:
+        final s = IntroOutroSettings.instance;
+        _player.seek(Duration(seconds: s.introSeconds));
+        _toast(AppLocalizations.of(context).playerSkippedIntro);
+      case IntroOutroAction.nextEpisode:
+        _toast(AppLocalizations.of(context).playerSkippedOutro);
+        _playNext();
+    }
+  }
+
+  // ── 下一集 / 切集 ───────────────────────────────────────
+
+  /// 手动/自动「下一集」：定位播放列表中的下一项后统一切集。
+  /// B 站番剧走剧集列表（[_switchToBiliEpisode]），本地/网络走 [_switchToVideo]。
+  Future<void> _playNext() async {
+    if (_biliMedia != null) {
+      final items = _biliItems;
+      final idx = _biliIndex;
+      if (idx < 0 || idx >= items.length - 1) return;
+      await _switchToBiliEpisode(items[idx + 1]);
+      return;
+    }
+    final list = _playlist;
+    if (list.isEmpty) return;
+    final key = _playlistKey;
+    final idx = list.indexWhere((v) => v.path == key);
+    if (idx < 0 || idx >= list.length - 1) return;
+    final next = list[idx + 1];
+    await _switchToVideo(next);
+  }
+
+  /// 列表循环：回到播放列表第一集（B 站番剧回到第一集）。
+  Future<void> _playFirst() async {
+    if (_biliMedia != null) {
+      final items = _biliItems;
+      if (items.isEmpty) return;
+      await _switchToBiliEpisode(items.first);
+      return;
+    }
+    final list = _playlist;
+    if (list.isEmpty) return;
+    final first = list.first;
+    // 同一路径不重播（B3/P1-8 根因）：重新 open 会让 mpv 丢弃全部 `sub-add`
+    // 的外挂轨道，而字幕侧 `reapplyForMedia` 的「同一媒体」早退又不会补挂
+    // → 单视频列表循环播到片尾即「外挂字幕消失」。原地回到开头，媒体状态
+    // （章节/弹幕/进度/音频处理）一律不动，与单集循环同一手法。
+    if (first.path == _playlistKey) {
+      _player.seek(Duration.zero);
+      _player.play();
+      return;
+    }
+    await _switchToVideo(first);
+  }
+
+  /// 播放列表切集统一入口（面板点击 / 下一集 / 列表循环）：
+  ///
+  /// - 本地文件：直接用媒体路径 open（[_switchTo]）；
+  /// - 网络视频：先为它注册一条**新的**回环流（每个文件一条 token，沿用
+  ///   「一次播放一条流」的纪律）再交给 [_switchTo]，成功后释放上一条流。
+  Future<void> _switchToVideo(VideoFile video) async {
+    if (video.source != VideoSource.network) {
+      await _switchTo(video.path, video.name);
+      return;
+    }
+    await _switchToNetworkVideo(video);
+  }
+
+  /// 网络存储列表切集：注册目标文件的回环流 → [_switchTo] 打开（同时把
+  /// [_networkSource] 换成新视频，字幕远端同名扫描与列表定位都按它工作）
+  /// → 释放上一条流（同一时刻只留一条流，避免 SMB/NAS 连接被列表翻页耗尽）。
+  ///
+  /// 返回新媒体状态（成功）或 null（失败/被并发守卫挡下），供竖屏页/听视频页
+  /// 同步自身状态。
+  Future<({String path, String title})?> _switchToNetworkVideo(
+    VideoFile video,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final connectionId = video.connectionId;
+    final remotePath = video.remotePath;
+    if (connectionId == null || remotePath == null || remotePath.isEmpty) {
+      return null;
+    }
+    // 并发互斥：与 [_switchTo] 同一守卫（提前挡一次，不白注册一条流）
+    if (_isSwitchingVideo) return null;
+    final connection = NetworkConnectionSettings.instance.byId(connectionId);
+    if (connection == null) {
+      _toast(l10n.playerNoNetworkCannotSwitch);
+      return null;
+    }
+    final String url;
+    try {
+      url = await NetworkRepository.instance.playbackUrl(
+        connection,
+        remotePath,
+        fileSize: video.size > 0 ? video.size : -1,
+        mimeType: networkMimeTypeForFileName(video.name) ?? 'video/mp4',
+      );
+    } catch (e) {
+      _toast(l10n.playerSwitchFailed(serviceErrorText(l10n, e)));
+      return null;
+    }
+    final previousUrl = _networkSource != null ? _path : null;
+    final previousSource = _networkSource;
+    try {
+      await _switchTo(url, video.name, networkSource: video);
+    } catch (_) {
+      // 切集失败（open 抛错）：刚注册的流没人用，立刻释放；来源标记也退回
+      // 上一个媒体（[_switchTo] 已在 open 前把它换成新视频），然后原样上抛
+      // （与本地切集同一行为，上层已有兜底）
+      _networkSource = previousSource;
+      await NetworkRepository.instance.releasePlayback(url);
+      rethrow;
+    }
+    if (_disposed || !mounted || _path != url) {
+      // 没落地（页面已退出 / 被并发守卫挡下 / 切集半途失败）：释放这条流，
+      // 来源标记退回来（否则字幕远端扫描/列表定位会指着一个没在播的视频）
+      if (mounted) _networkSource = previousSource;
+      await NetworkRepository.instance.releasePlayback(url);
+      return null;
+    }
+    _ownNetworkUrl = url;
+    if (previousUrl != null && previousUrl != url) {
+      await NetworkRepository.instance.releasePlayback(previousUrl);
+    }
+    return (path: _path, title: _title);
+  }
+
+  /// 切换到指定 B 站剧集：重新解析 playurl → 换 [BiliMedia] → 重开双流
+  /// （代理重新注册 + 弹幕/章节重载），并在切集前清掉旧集轨道与跟踪状态。
+  ///
+  /// 与 [_switchTo]（本地文件）分开：B 站媒体没有本地路径，进度恢复、
+  /// 字幕外挂、同名弹幕查找都不适用，改由 [_openBiliMedia] 统一驱动。
+  ///
+  /// 返回新集的 (path, title, epId) 供竖屏页同步自身状态；失败返回 null。
+  Future<({String path, String title, int epId})?> _switchToBiliEpisode(
+    BiliPlaylistItem item,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final playlist = widget.biliPlaylist;
+    if (playlist == null) return null;
+    if (item.epId == _biliMedia?.epId) return null;
+    // 并发互斥（B3/P2-2）：与 [_switchTo] 同一守卫，防止两次解析/重开并发
+    // 操作同一 Player（连点两次剧集、或自动连播与手动点按重叠）。
+    if (_isSwitchingVideo) return null;
+    _isSwitchingVideo = true;
+    try {
+      _chapterTracker.clear();
+      _subtitleController.clear();
+      _audioController.clear();
+      _introOutroTracker.reset();
+      if (mounted) setState(() => _resumeVisible = false);
+      final service = BiliVideoService();
+      final media = await service.resolvePgcMedia(item.episode);
+      if (_disposed || !mounted) return null;
+      if (media.playUrl.defaultVideo == null ||
+          media.playUrl.defaultAudio == null) {
+        _toast(l10n.playerResolveUrlFailed);
+        return null;
+      }
+      setState(() {
+        _biliMedia = media;
+        _path = media.videoUrl;
+        _title = item.title;
+      });
+      await _openBiliMedia();
+      return (path: _path, title: _title, epId: item.epId);
+    } catch (e) {
+      if (mounted) _toast(l10n.playerSwitchEpisodeFailed('$e'));
+      return null;
+    } finally {
+      _isSwitchingVideo = false;
+    }
+  }
+
+  /// 统一切集路径（自动连播 / 手动下一集 / 列表循环 / 后续列表选择都用它）：
+  ///
+  /// 1. 置 [_isSwitchingVideo] 防 EOF 重入（切集时旧文件可能触发 completed）；
+  /// 2. **切集前必须 [_saveProgress]**（进度记忆要求：任何切换路径都先记旧进度，
+  ///    必须在 `_path` 更新前调用）；
+  /// 3. 打开新媒体（恢复时暂停加载 + 封层 + seek，见 [openAndRestore]）并
+  ///    重设倍速、超分着色器（mpv 打开新文件时 glsl-shaders 需重确认）；
+  /// 4. 重置播放页状态与恢复指示器（新视频各自恢复自己的进度）。
+  ///
+  /// [networkSource] 非空表示新媒体的 [path] 是网络存储的回环播放 URL，它带来
+  /// 新的远端来源（字幕远端同名扫描、列表定位都按它工作）；本地切集传 null
+  /// （来源标记必须清掉，防串到本地视频）。
+  Future<void> _switchTo(
+    String path,
+    String title, {
+    VideoFile? networkSource,
+  }) async {
+    // 并发互斥（B3/P2-2）：[_isSwitchingVideo] 此前只用于抑制切集瞬间的 EOF，
+    // **不拦第二次切集** —— 连点两次「下一集」（间隔 <1 秒）会让两个
+    // `openAndRestore` 并发操作同一 Player（「切到 A 视频却放 B 音频」）。
+    if (_isSwitchingVideo) return;
+    _isSwitchingVideo = true;
+    try {
+      // 章节功能：先清空旧媒体的章节标记（防 open 期间旧数据闪现）
+      _chapterTracker.clear();
+      // AB 循环：上一集的 A/B 两点作废（mpv 的 ab-loop 属性会跨文件保留）
+      await _session.resetAbLoopForNewMedia();
+      // 字幕功能：清空旧媒体轨道（切集后重新加载）
+      _subtitleController.clear();
+      // 来源标记随新媒体一起换：本地切集为 null（防串到本地视频），
+      // 网络存储列表切集为新视频的远端来源
+      _networkSource = networkSource;
+      // 新媒体的时长要重新回报（切集后 duration 事件会重新来一轮）
+      _reportedDuration = false;
+      // 音频功能：清空旧媒体音轨（切集后重新加载；外部音轨临时不跨集保留）
+      _audioController.clear();
+      // 片头片尾：重置跟踪状态（open 期间位置事件不评估）
+      _introOutroTracker.reset();
+      if (mounted) {
+        setState(() => _resumeVisible = false);
+      }
+      await _saveProgress(forcePersist: true);
+      // mpv 缓存/网络调参：切集同样在 open 前重写（本地↔在线来源可能切换）
+      await _applyPlaybackTuning(path);
+      // 新视频的保存进度：open 时恢复（阈值过滤见 [_resumeStartFor]，
+      // 防「已看完」定位到结尾触发 EOF 连播）
+      final savedForNew = _resumeStartFor(path);
+      // 新集从头播 = 用户重新看它：解除「已看完」粘性（B3）
+      if (savedForNew == null) {
+        PlaybackProgressService.instance.releaseCompleted(path);
+      }
+      // 恢复时先盖住视频（暂停加载 + seek 都在封层下）
+      if (savedForNew != null && mounted) setState(() => _restoring = true);
+      final restored = await openAndRestore(
+        _player,
+        path,
+        saved: savedForNew,
+        // 倍速 + 超分/后处理在播放/seek 前完成（避免 shader 变化重置位置）
+        prepare: () async {
+          await _player.setRate(_session.rate);
+          await _applyShaderPipeline();
+        },
+      );
+      if (_disposed || !mounted) return;
+      // 播放历史：切集同样记录新的一集（列表播放均为可重放来源）
+      _recordPlaybackHistory(path, title);
+      if (mounted) {
+        setState(() {
+          _path = path;
+          _title = title;
+          // 同步播放器真实状态（此时文件已加载，时长/位置已就绪；
+          // 不能置零——duration 流事件在 open 阶段已发出，不会再重发）
+          _positionNotifier.value = _player.state.position;
+          _durationNotifier.value = _player.state.duration;
+          _dragPositionNotifier.value = null;
+          _indicator = null;
+          _restoring = false;
+          _clearThumbnail();
+        });
+      }
+      // 新集还原缩放 + 丢弃旧集的滑动浮层（与共享会话状态同步：
+      // 两页看到同一份画面状态，B4/D2）
+      _session.resetZoom();
+      _session.discardSwipe();
+      if (restored && savedForNew != null) {
+        _positionNotifier.value = savedForNew;
+        _showResumeIndicator();
+      }
+      // 片头片尾：恢复点感知后标记就绪（新集从头播则直接评估）
+      if (restored && savedForNew != null) {
+        _introOutroTracker.markResumedPosition(
+          savedForNew,
+          _player.state.duration,
+        );
+      }
+      _introOutroTracker.markReady();
+      // 章节功能：切集后重新读取新媒体的章节
+      unawaited(_chapterTracker.load());
+      // 字幕功能：切集后重新添加外挂字幕 + 刷新轨道 + 应用设置
+      unawaited(
+        _subtitleController.reapplyForMedia(path, networkSource: _networkSource),
+      );
+      // 音频功能：切集后刷新音轨 + 同步当前音轨 + 应用声道与音频处理
+      unawaited(_audioController.reapplyForMedia(path));
+      // 弹幕功能：切集后重新加载新集的同名弹幕（loadForVideo 内部会先
+      // 重置调度器并清屏，在途旧集弹幕不会灌入新集）
+      unawaited(_danmakuController.loadForVideo(path));
+      // 解码功能：切集时链已在 open 前重写（不做事后回退判定，见
+      // utils/decode_policy.dart）
+      // 杜比视界偏色检测 + 引导（切集后新视频重新检测）
+      unawaited(_checkDolbyVision());
+    } on AssertionError {
+      // 播放器已被销毁（切集过程中退出）：静默返回，不写假崩溃日志
+      return;
+    } finally {
+      // 切集中途放弃时同样要揭掉恢复封层（B3/P1-12），否则黑屏盖层卡住
+      if (mounted && _restoring) setState(() => _restoring = false);
+      _isSwitchingVideo = false;
+    }
+    _resetHideTimer();
+  }
+
+  // ── 倍速 ────────────────────────────────────────────────
+
+  /// 应用倍速。[remember] 为 true 时写入记忆（下次打开恢复），
+  /// 临时调整传 false，避免高频写盘。
+  ///
+  /// B4/P1-2：倍速唯一真值在共享会话状态里（横竖屏读同一个），
+  /// 竖屏页不再从「倍速记忆设置」取基准。
+  void _setSpeed(double v, {bool remember = true}) {
+    _session.setRate(v, remember: remember);
+  }
+
+  // ── 右侧面板（更多 / 自定义 / 按钮大小 / 倍速）────────────────
+
+  /// 倍速面板页（底栏倍速按钮弹出）
+  PlayerPanelPage _speedPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerPlaybackSpeed,
+        body: PlayerSpeedPanel(
+          speedListenable: _session.rateListenable,
+          onSpeedChanged: _setSpeed,
+          onTemporaryApply: (v) => _setSpeed(v, remember: false),
+          onReset: () => _setSpeed(1.0),
+        ),
+      );
+
+  /// 超分面板页（底栏超分辨率按钮弹出，与倍速面板同一外壳/胶囊样式）。
+  /// 面板直接驱动 [SuperResolutionService] 单例（模式/质量/记忆）。
+  PlayerPanelPage _superResolutionPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerSuperResolution,
+        body: PlayerSuperResolutionPanel(player: _player),
+      );
+
+  /// 后处理面板页（「更多 → 后处理」进入）：基础调节 + 风格化效果。
+  PlayerPanelPage _postProcessPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerPostProcess,
+        body: const PlayerPostProcessPanel(),
+      );
+
+  /// 控制栏按钮大小面板页（顶栏槽位 / 「更多」共用）。
+  PlayerPanelPage _buttonSizePanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerButtonSize,
+        body: const PlayerButtonSizePanel(),
+      );
+
+  /// 打开媒体前的着色器准备：超分 + 后处理。
+  ///
+  /// 两条链由 [PlayerShaderPipeline] 拼成一条写给 mpv（顺序：超分 → 后处理），
+  /// 谁也不会覆盖谁。失败一律静默：着色器不生效不该影响播放与进度恢复。
+  Future<void> _applyShaderPipeline() async {
+    try {
+      await SuperResolutionService.instance.apply(_player);
+    } catch (_) {}
+    try {
+      await PostProcessService.instance.apply(_player);
+    } catch (_) {}
+  }
+
+  /// 画面比例面板页（顶栏「比例」槽位弹出，PiliPlus 同款选项）
+  PlayerPanelPage _fitPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerAspectRatio,
+        body: const PlayerFitPanel(),
+      );
+
+  /// 投屏（顶栏槽位/「更多」面板共用的 PlayerTopAction.cast）：
+  /// P0 仅本地文件可投，其余来源 toast 提示；LAN 服务器在投屏成功后
+  /// 保持运行供电视拉流，退出播放页时释放。
+  Future<void> _openCast() async {
+    final l10n = AppLocalizations.of(context);
+    if (classifyCastSource(_path) != CastSource.localFile) {
+      _toast(l10n.playerCastUnsupportedSource);
+      return;
+    }
+    await showCastDeviceDialog(context, path: _path);
+  }
+
+  /// 「更多」面板主页：未放入槽位的动作网格（图标上 / 名称下，3 列）
+  /// + 末尾的「自定义」入口（固定最后一格）。
+  ///
+  /// 未放置到顶部 5 槽位的动作自动出现在「更多」里，点击行为不变（直接执行）；
+  /// 增删/排序在「自定义」页里做。用 ListenableBuilder 监听设置：在「自定义」
+  /// 页内增删槽位后返回本页自动刷新。
+  Widget _buildMorePanel() {
+    // 用 Builder 取面板树内的 context：PlayerPanelNavigator.of 要求调用方
+    // 位于 _PanelNavigatorScope 之下（在弹窗路由内），不能直接用 State 的 context
+    // （历史 bug：of() 断言 scope == null，入口点击无反应）。
+    return Builder(
+      builder: (panelContext) => ListenableBuilder(
+        listenable: _settings,
+        builder: (context, _) {
+          final l10n = AppLocalizations.of(context);
+          final notPlaced = PlayerTopAction.values
+              .where((a) => !_settings.topActions.contains(a))
+              .toList();
+          // 整页一个滚动视图（标题 + 网格一起滚）：网格自身不再限高，
+          // 避免出现「只有网格那一小块能滑」的局促滚动区
+          return SingleChildScrollView(
+            key: const PageStorageKey('more_panel'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // B 站在线播放专属：清晰度入口（本地文件播放不出现），
+                // 保持列表行样式（带当前清晰度副标题）
+                if (_biliMedia != null)
+                  _PanelActionTile(
+                    icon: Icons.hd_outlined,
+                    label: l10n.commonQuality,
+                    subtitle: _currentQualityDescription(_biliMedia!),
+                    onTap: () => PlayerPanelNavigator.of(panelContext)
+                        .push(_qualityPanelPage()),
+                  ),
+                if (notPlaced.isNotEmpty)
+                  PlayerPanelSectionLabel(l10n.playerFeatureNotPlaced),
+                PlayerActionGrid(
+                  tiles: (tileWidth, tileHeight) => [
+                    // 面板类动作面板内 push（返回按钮可回「更多」）；
+                    // 动作类（画中画/听视频）由 [_handlePanelAction] 关闭面板后执行
+                    for (final a in notPlaced)
+                      PlayerActionGridTile(
+                        icon: a.icon,
+                        label: playerTopActionLabel(l10n, a),
+                        tooltip: a.implemented
+                            ? null
+                            : l10n.playerFeatureComingSoon,
+                        width: tileWidth,
+                        height: tileHeight,
+                        onTap: () => _handlePanelAction(panelContext, a),
+                      ),
+                    // 自定义控制栏：始终排在网格最后一格
+                    PlayerActionGridTile(
+                      icon: Icons.tune,
+                      label: l10n.playerCustomizeControlBar,
+                      width: tileWidth,
+                      height: tileHeight,
+                      onTap: () => PlayerPanelNavigator.of(panelContext).push(
+                        PlayerPanelPage(
+                          title: l10n.playerCustomizeControlBar,
+                          body: _buildEditPanel(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 「自定义」页（内容与竖屏共用 [PlayerCustomizePanel]）：
+  /// 上方 5 格预览条（长按拖动排序 + 点方块移除）+ 下方可添加网格
+  /// （点方块添加，带飞行动画）+ 底部重置控制栏。
+  ///
+  /// 数据仍是 [PlayerControlsSettings.topActions]（有序列表，上限 5），
+  /// 预览条顺序 = 播放页顶栏从左到右的顺序；返回/「更多」是固定按钮、
+  /// 不参与自定义，故不在预览条中。
+  Widget _buildEditPanel() => const PlayerCustomizePanel();
+
+  /// 点击顶栏槽位执行动作（比例 → 弹画面比例面板；画中画 → [_enterPip]；
+  /// 循环播放 → [_openLoopPanel]；听视频 → [_openAudioPlayer]；
+  /// 片头片尾 → [_openIntroOutroPanel]；其余占位提示即将上线）。
+  /// 倍速已移至底栏固定按钮（见底栏），不在此列。
+  void _handleSlotAction(PlayerTopAction action) {
+    switch (action) {
+      case PlayerTopAction.aspect:
+        _openFitPanel();
+      case PlayerTopAction.subtitle:
+        _openSubtitlePanel();
+      case PlayerTopAction.audio:
+        _openAudioPanel();
+      case PlayerTopAction.danmaku:
+        // 弹幕阶段1：顶栏槽位进入弹幕二级界面（本地/网络/自动匹配/设置）
+        _openDanmakuPanel();
+      case PlayerTopAction.equalizer:
+        _openEqualizerPanel();
+      case PlayerTopAction.decode:
+        _openDecodePanel();
+      case PlayerTopAction.listen:
+        _openAudioPlayer();
+      case PlayerTopAction.pip:
+        _enterPip();
+      case PlayerTopAction.loop:
+        _openLoopPanel();
+      case PlayerTopAction.chapter:
+        _openChapterPanel();
+      case PlayerTopAction.introOutro:
+        _openIntroOutroPanel();
+      case PlayerTopAction.cast:
+        _openCast();
+      case PlayerTopAction.diagnostics:
+        _openDiagnosticsPanel();
+      case PlayerTopAction.buttonSize:
+        _openButtonSizePanel();
+      case PlayerTopAction.postProcess:
+        _openPostProcessPanel();
+      case PlayerTopAction.abLoop:
+        _openAbLoopPanel();
+      case PlayerTopAction.flip:
+        _openFlipPanel();
+    }
+  }
+
+  /// 「更多」面板内动作对应的面板页（返回 null 表示不是面板类动作）。
+  PlayerPanelPage? _panelPageFor(PlayerTopAction action) {
+    switch (action) {
+      case PlayerTopAction.aspect:
+        return _fitPanelPage();
+      case PlayerTopAction.subtitle:
+        return _subtitlePanelPage();
+      case PlayerTopAction.audio:
+        return _audioPanelPage();
+      case PlayerTopAction.danmaku:
+        // 弹幕阶段1：顶栏槽位/更多均进入弹幕二级界面
+        //（本地弹幕/网络弹幕/自动匹配/弹幕设置）
+        return _danmakuPanelPage();
+      case PlayerTopAction.loop:
+        return _loopPanelPage();
+      case PlayerTopAction.chapter:
+        return _chapterPanelPage();
+      case PlayerTopAction.introOutro:
+        return _introOutroPanelPage();
+      case PlayerTopAction.decode:
+        return _decodePanelPage();
+      case PlayerTopAction.equalizer:
+        return _equalizerPanelPage();
+      case PlayerTopAction.diagnostics:
+        return _diagnosticsPanelPage();
+      case PlayerTopAction.buttonSize:
+        return _buttonSizePanelPage();
+      case PlayerTopAction.postProcess:
+        return _postProcessPanelPage();
+      case PlayerTopAction.abLoop:
+        return _abLoopPanelPage();
+      case PlayerTopAction.flip:
+        return _flipPanelPage();
+      default:
+        return null;
+    }
+  }
+
+  /// 「更多」面板内点击动作：面板类 → 面板内 push（header 自动显示返回按钮，
+  /// 可返回「更多」）；动作类（画中画/听视频）→ 先关闭「更多」面板再执行，
+  /// 避免叠加第二个面板（§4.5 约定）。
+  void _handlePanelAction(BuildContext panelContext, PlayerTopAction action) {
+    final page = _panelPageFor(action);
+    if (page != null) {
+      PlayerPanelNavigator.of(panelContext).push(page);
+      return;
+    }
+    switch (action) {
+      case PlayerTopAction.aspect:
+      case PlayerTopAction.loop:
+      case PlayerTopAction.chapter:
+      case PlayerTopAction.introOutro:
+      case PlayerTopAction.subtitle:
+      case PlayerTopAction.audio:
+      case PlayerTopAction.decode:
+      case PlayerTopAction.danmaku:
+        break; // 已在上方 _panelPageFor 分支处理
+      case PlayerTopAction.equalizer:
+        break; // 已在上方 _panelPageFor 分支处理
+      case PlayerTopAction.listen:
+        Navigator.of(panelContext).pop();
+        _openAudioPlayer();
+      case PlayerTopAction.pip:
+        Navigator.of(panelContext).pop();
+        _enterPip();
+      case PlayerTopAction.cast:
+        // 动作类：先关「更多」面板再弹投屏设备选择（§4.5 不叠加弹窗）
+        Navigator.of(panelContext).pop();
+        _openCast();
+      case PlayerTopAction.diagnostics:
+        break; // 已在上方 _panelPageFor 分支处理
+      case PlayerTopAction.buttonSize:
+      case PlayerTopAction.postProcess:
+        break; // 已在上方 _panelPageFor 分支处理
+      case PlayerTopAction.abLoop:
+      case PlayerTopAction.flip:
+        break; // 已在上方 _panelPageFor 分支处理
+    }
+  }
+
+  /// 章节面板页（顶栏「章节」动作 / 点击章节名称共用；
+  /// 无章节时面板内显示空状态提示）。
+  PlayerPanelPage _chapterPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionChapter,
+        body: Builder(
+          builder: (panelContext) {
+            final navigator = PlayerPanelNavigator.of(panelContext);
+            return PlayerChapterPanel(
+              tracker: _chapterTracker,
+              onSelect: (chapter) => _chapterTracker.seekToChapter(chapter),
+              onPushSubPage: (title, body) =>
+                  navigator.push(PlayerPanelPage(title: title, body: body)),
+            );
+          },
+        ),
+      );
+
+  /// 打开章节列表面板（右侧滑入，[showPlayerPanel]）。
+  Future<void> _openChapterPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_chapterPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 字幕面板页（顶栏/更多「字幕」动作，工作.md 阶段1 第 3 点）：
+  /// 一级面板集成字幕轨道 + 外挂导入 + 设置入口。
+  PlayerPanelPage _subtitlePanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionSubtitle,
+        body: Builder(
+          builder: (panelContext) {
+            final navigator = PlayerPanelNavigator.of(panelContext);
+            return PlayerSubtitlePanel(
+              controller: _subtitleController,
+              onPushSubPage: (title, body) => navigator.push(
+                PlayerPanelPage(title: title, body: body),
+              ),
+              onPopSubPage: () => navigator.pop(),
+            );
+          },
+        ),
+      );
+
+  /// 打开字幕面板（右侧滑入，[showPlayerPanel]）。
+  Future<void> _openSubtitlePanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_subtitlePanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 点击跳过胶囊：跳到当前片段结束（EOF 保护见 [skipSeekTarget]），
+  /// seek 离开片段后胶囊自动消失；回拖进片段可再次触发（可重复）。
+  Future<void> _skipCurrentSegment() async {
+    _resetHideTimer();
+    await _chapterTracker.skipActiveSegment();
+  }
+
+  /// 音频面板页（顶栏/更多「音频」动作，工作.md 音频功能）：
+  /// 一级面板集成音轨 + 外部音轨导入 + 音频声道 + 音频处理。
+  PlayerPanelPage _audioPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionAudio,
+        body: Builder(
+          builder: (panelContext) {
+            final navigator = PlayerPanelNavigator.of(panelContext);
+            return PlayerAudioPanel(
+              controller: _audioController,
+              onPushSubPage: (title, body) => navigator.push(
+                PlayerPanelPage(title: title, body: body),
+              ),
+              onPopSubPage: () => navigator.pop(),
+            );
+          },
+        ),
+      );
+
+  /// 打开音频面板（右侧滑入，[showPlayerPanel]）。
+  Future<void> _openAudioPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_audioPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 弹幕面板页（顶栏/更多「弹幕」动作，阶段2+3）：
+  /// 二级入口列表——本地弹幕（文件选择器导入）/ 网络弹幕（弹弹Play 搜索）/
+  /// 自动匹配（弹弹Play 文件匹配）/ 弹幕设置（面板内就地切换到设置页，
+  /// 不叠加第二个面板，§4.5）。
+  PlayerPanelPage _danmakuPanelPage() {
+    // 新一次弹幕面板会话开始：上一次若是**用户主动关面板**，此刻等价于
+    // "关掉搜索结果" → 清空；若是"选完一集自动关闭" → 保留（省一次搜索请求）
+    DanmakuSearchStore.instance.beginPanelSession();
+    return PlayerPanelPage(
+      title: AppLocalizations.of(context).commonDanmaku,
+      body: Builder(
+          builder: (panelContext) {
+            final navigator = PlayerPanelNavigator.of(panelContext);
+            return PlayerDanmakuPanel(
+              controller: _danmakuController,
+              onSettingsTap: () => navigator.push(
+                PlayerPanelPage(
+                  title: AppLocalizations.of(context).playerDanmakuSettings,
+                  body: const PlayerDanmakuSettingsPanel(),
+                ),
+              ),
+              onPushSubPage: (title, body) => navigator.push(
+                PlayerPanelPage(title: title, body: body),
+              ),
+              onPopSubPage: () => navigator.pop(),
+              onNetworkTap: () => navigator.push(
+                PlayerPanelPage(
+                  title: AppLocalizations.of(context).playerDanmakuNetwork,
+                  body: PlayerDanmakuNetworkPanel(
+                    // 点结果 → 集数二级界面（面板内就地切换，不叠第二个弹窗）
+                    onResultTap: (item) => navigator.push(
+                      PlayerPanelPage(
+                        title: item.anime.animeTitle,
+                        // 标题就是番剧名本身，长了要能看全（跑马灯）
+                        marqueeTitle: true,
+                        body: PlayerDanmakuEpisodesPanel(
+                          item: item,
+                          // 当前视频文件名：进页自动定位到对应集
+                          currentFileName: _path,
+                          onEpisodeSelected: _onNetworkEpisodeSelected,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              onAutoMatchTap: _autoMatchDanmaku,
+            );
+          },
+        ),
+      );
+  }
+
+  /// 打开弹幕面板（右侧滑入，[showPlayerPanel]）。
+  Future<void> _openDanmakuPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_danmakuPanelPage()]);
+    _resetHideTimer();
+  }
+
+  // ── 网络弹幕 / 自动匹配（阶段3：弹弹Play 开放弹幕网络）────────
+
+  /// 网络搜索选中某集：保存自动匹配缓存（切集自动匹配用）→ 拉取并装载。
+  void _onNetworkEpisodeSelected(
+    DandanAnime anime,
+    DandanEpisode episode,
+    String? serverUrl,
+  ) {
+    unawaited(_loadSelectedNetworkDanmaku(anime, episode, serverUrl));
+  }
+
+  Future<void> _loadSelectedNetworkDanmaku(
+    DandanAnime anime,
+    DandanEpisode episode,
+    String? serverUrl,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    await _danmakuController.saveAutoMatchCache(
+      animeId: anime.animeId,
+      animeTitle: anime.animeTitle,
+      serverUrl: serverUrl,
+      episodes: anime.episodes,
+    );
+    final ok = await _danmakuController.loadNetworkDanmaku(
+      episodeId: episode.episodeId,
+      animeTitle: anime.animeTitle,
+      episodeTitle: episode.episodeTitle,
+      serverUrl: serverUrl,
+    );
+    if (!mounted) return;
+    if (!ok) _toast(l10n.playerDanmakuLoadFailed);
+  }
+
+  /// 自动匹配按钮：对当前视频文件匹配弹幕，候选唯一直接加载，多个弹选择框。
+  Future<void> _autoMatchDanmaku() async {
+    final l10n = AppLocalizations.of(context);
+    _toast(l10n.playerDanmakuMatching);
+    final results = await _danmakuController.matchCurrentVideo();
+    if (!mounted) return;
+    if (results.isEmpty) {
+      _toast(l10n.playerDanmakuNoMatch);
+      return;
+    }
+    if (results.length == 1) {
+      await _loadMatchedDanmaku(results.first);
+      return;
+    }
+    await _showMatchSelectionDialog(results);
+  }
+
+  /// 加载一条自动匹配候选，并异步取回该番剧完整集列表存入缓存（切集自动匹配）。
+  Future<void> _loadMatchedDanmaku(DanmakuMatchItem item) async {
+    final l10n = AppLocalizations.of(context);
+    final match = item.match;
+    final ok = await _danmakuController.loadNetworkDanmaku(
+      episodeId: match.episodeId,
+      animeTitle: match.animeTitle,
+      episodeTitle: match.episodeTitle,
+      serverUrl: item.serverUrl,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      _toast(l10n.playerDanmakuLoadFailed);
+      return;
+    }
+    unawaited(_cacheMatchedAnime(item));
+  }
+
+  Future<void> _cacheMatchedAnime(DanmakuMatchItem item) async {
+    final match = item.match;
+    final episodes = await _danmakuController.fetchAnimeEpisodes(
+      animeId: match.animeId,
+      animeTitle: match.animeTitle,
+      serverUrl: item.serverUrl,
+    );
+    if (episodes == null || episodes.isEmpty) return;
+    await _danmakuController.saveAutoMatchCache(
+      animeId: match.animeId,
+      animeTitle: match.animeTitle,
+      serverUrl: item.serverUrl,
+      episodes: episodes,
+    );
+  }
+
+  /// 自动匹配多个候选时的选择弹窗（§4.5 统一用 showAppDialog）。
+  Future<void> _showMatchSelectionDialog(List<DanmakuMatchItem> results) async {
+    final l10n = AppLocalizations.of(context);
+    final selected = await showAppDialog<DanmakuMatchItem>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.playerDanmakuPickMatch),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final item in results)
+                ListTile(
+                  title: Text(
+                    '[${item.serverName}] ${item.match.animeTitle} - '
+                    '${item.match.episodeTitle}',
+                  ),
+                  onTap: () => Navigator.of(context).pop(item),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+        ],
+      ),
+    );
+    if (selected != null) await _loadMatchedDanmaku(selected);
+  }
+
+  // ── 画中画 / 循环播放 / 听视频 ──────────────────────────
+
+  /// 进入画中画小窗（顶栏「画中画」槽位）。
+  ///
+  /// 1. 先查设备支持（API 26+ 且系统具备 PiP 特性），不支持则提示；
+  /// 2. 暂停控制层隐藏计时器并隐藏控制层（PiP 期间不显示控制）；
+  /// 3. 以当前视频宽高比进入小窗（[pipAspectRatio] 约分 + 0.5–2.39 限制，
+  ///    尺寸未知回退 16:9；src PipHelper 同款）；
+  /// 4. media_kit 在 PiP 期间保持播放；返回前台由
+  ///    [didChangeAppLifecycleState] 恢复控制层与隐藏计时。
+  Future<void> _enterPip() async {
+    final l10n = AppLocalizations.of(context);
+    final supported = await DeviceServices.isPipSupported();
+    if (!supported) {
+      _toast(l10n.playerPipUnsupported);
+      return;
+    }
+    _hideTimer?.cancel();
+    if (mounted && _controlsVisible) {
+      setState(() => _controlsVisible = false);
+      _controlsController.reverse();
+    }
+    final ratio = pipAspectRatio(
+      _player.state.width ?? 0,
+      _player.state.height ?? 0,
+    );
+    final ok = await DeviceServices.enterPip(
+      aspectWidth: ratio.width,
+      aspectHeight: ratio.height,
+    );
+    if (!ok && mounted) {
+      _toast(l10n.playerPipFailed);
+      _resetHideTimer();
+    }
+  }
+
+  /// 循环播放面板页（顶栏/更多「循环播放」动作弹出，工作.md 第 6 点：
+  /// 循环模式从设置页移入播放界面直接调整，可随自定义槽位增删）。
+  PlayerPanelPage _loopPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionLoop,
+        body: const PlayerLoopPanel(),
+      );
+
+  /// 打开循环播放面板（顶栏/更多「循环播放」动作）
+  Future<void> _openLoopPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_loopPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// AB 段循环面板页（顶栏/更多「AB 循环」动作弹出）：
+  /// A/B 两点就存在共享会话状态里，转屏不丢。
+  PlayerPanelPage _abLoopPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionAbLoop,
+        body: PlayerAbLoopPanel(
+          session: _session,
+          positionListenable: _positionNotifier,
+        ),
+      );
+
+  /// 打开 AB 段循环面板（顶栏/更多「AB 循环」动作）
+  Future<void> _openAbLoopPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_abLoopPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 画面翻转面板页（顶栏/更多「画面翻转」动作弹出）：水平 / 垂直两个开关
+  PlayerPanelPage _flipPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionFlip,
+        body: PlayerFlipPanel(session: _session),
+      );
+
+  /// 打开画面翻转面板（顶栏/更多「画面翻转」动作）
+  Future<void> _openFlipPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_flipPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 解码面板页（顶栏/更多「解码」动作弹出，四档 hwdec）
+  PlayerPanelPage _decodePanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionDecode,
+        body: const PlayerDecodePanel(),
+      );
+
+  /// 打开解码面板（顶栏「解码」动作）
+  Future<void> _openDecodePanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_decodePanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 播放诊断面板页（顶栏/更多「播放诊断」动作弹出，§4.27）
+  PlayerPanelPage _diagnosticsPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionDiagnostics,
+        body: PlayerDiagnosticsPanel(readProperties: _readDiagnosticsProperties),
+      );
+
+  /// 打开播放诊断面板（顶栏「播放诊断」动作）
+  Future<void> _openDiagnosticsPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_diagnosticsPanelPage()]);
+    _resetHideTimer();
+  }
+
+  /// 读取一组 mpv 运行时属性（诊断面板每秒采样一次）。
+  ///
+  /// 单个属性读取失败（不支持/未就绪）只把该键置 null，不影响其余字段；
+  /// 非 NativePlayer 平台返回空表（面板显示占位符）。
+  ///
+  /// ⚠️ **不可读一律返回 null，不要落成空串**：mpv 的 `getProperty` 对不可用
+  /// 属性返回空串，若原样带出，面板会把它当合法值覆盖掉上一次的好值（成片
+  /// 变横杠且无法与"真的为空"区分）。判空统一走 [isDiagnosticValueAvailable]。
+  ///
+  /// ⚠️ `waitForInitialization: false` 是**必须的**：默认值会等
+  /// `waitForVideoControllerInitializationIfAttached`（视频控制器就绪），而
+  /// 面板只需要读 mpv 属性、不需要视频输出。视频输出异常时该 completer 一直
+  /// 不完成 → 全部属性一起阻塞 → 面板整块空（真机复现：开 Vulkan 后
+  /// 「视频编码/硬解/视频输出/分辨率…」集体变横杠的根因）。
+  ///
+  /// 读取按 [expandDiagnosticPropertyNames] 展开（含字段别名回退），再经
+  /// [pickDiagnosticValue] 归一到主键名。
+  Future<Map<String, String?>> _readDiagnosticsProperties() async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return const {};
+    final raw = <String, String?>{};
+    for (final key in expandDiagnosticPropertyNames()) {
+      try {
+        final value =
+            await platform.getProperty(key, waitForInitialization: false);
+        // 不可读落哨兵值：日志里能区分"读不到"与"读到了但是空串"
+        raw[key] = isDiagnosticValueAvailable(value)
+            ? value
+            : kDiagnosticUnreadable;
+      } catch (_) {
+        raw[key] = kDiagnosticUnreadable;
+      }
+    }
+    final out = <String, String?>{};
+    for (final key in kPlayerDiagnosticsProperties) {
+      out.addAll(pickDiagnosticValue(raw, key));
+    }
+    return out;
+  }
+
+  /// 均衡器面板页（顶栏/更多「音频均衡器」动作弹出，工作.md 均衡器功能）：
+  /// 5 频段 + 低音增强 + 虚拟环绕 + 预设，状态由 [EqualizerSettings] 全局持久化。
+  PlayerPanelPage _equalizerPanelPage() => PlayerPanelPage(
+        title: AppLocalizations.of(context).playerActionEqualizer,
+        body: const PlayerEqualizerPanel(),
+      );
+
+  /// 打开均衡器面板（顶栏「音频均衡器」动作）
+  Future<void> _openEqualizerPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_equalizerPanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openSpeedPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_speedPanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openSuperResolutionPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_superResolutionPanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openFitPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_fitPanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openButtonSizePanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_buttonSizePanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openPostProcessPanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(context, pages: [_postProcessPanelPage()]);
+    _resetHideTimer();
+  }
+
+  Future<void> _openMorePanel() async {
+    _hideTimer?.cancel();
+    await showPlayerPanel(
+      context,
+      pages: [
+        PlayerPanelPage(
+          title: AppLocalizations.of(context).commonMore,
+          body: _buildMorePanel(),
+        ),
+      ],
+    );
+    _resetHideTimer();
+  }
+
+  /// 右下角「选择屏幕」（工作.md 第 17/18 点）：切换到竖屏播放页。
+  ///
+  /// v3 重构（对齐 KT 项目丝滑切换）：**横竖屏共享同一个 [Player] /
+  /// [VideoController]** —— 切换只是换一个布局渲染同一路画面，**音频零中断、
+  /// 无黑屏、无重新加载**。竖屏页不新建播放器、不恢复进度（同一会话），
+  /// 也不负责退出时的方向/系统 UI（由本页统一恢复）。
+  ///
+  /// [onVideoChanged]：竖屏页切集后同步最新 path/title 给本页；
+  /// [onExitPlayer]：竖屏页 EOF「自动退出」时先关竖屏页再退出本页（回到列表）。
+  ///
+  /// [followPhone] = true 表示这次 push 是「跟随手机方向」触发的（窗口已是
+  /// 竖屏）：竖屏页不锁定竖屏、窗口转回横屏时自己 pop；转场也取瞬时（不会有
+  /// 淡入过程暴露下面那层横屏布局）。用户点「选择屏幕」进来的（默认 false）
+  /// 仍按原来的方式锁竖屏。
+  Future<void> _openPortraitPlayer({bool followPhone = false}) async {
+    // 重入 / 互斥守卫（B3/P2-1）：连点切屏按钮会 push 两个竖屏页；听视频页
+    // 打开期间也不允许再叠一层竖屏页（三者共享同一 Player，会互相抢方向、
+    // 系统 UI 与 `_portraitActive`/`_audioActive` 标志）。
+    if (_portraitActive || _audioActive.value) return;
+    _hideTimer?.cancel();
+    _portraitActive = true;
+    // 工作.md 第 3 点：恢复进度指示器状态传给竖屏页（锁定竖屏时横屏页
+    // 已完成恢复，指示器在竖屏页显示），并让竖屏页关闭时同步隐藏本页
+    final resumeVisible = _resumeVisible;
+    _resumeVisible = false;
+    if (mounted) setState(() {});
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        settings: const RouteSettings(name: playerRouteName),
+        transitionDuration: followPhone
+            ? Duration.zero
+            : const Duration(milliseconds: 200),
+        // 出场瞬时：竖屏页 pop 即消失（退出播放/切回横屏不再有 200ms 淡出，
+        // 与主播放路由「无退出动画」保持一致）
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, _, _) => PlayerPortraitPage(
+          player: _player,
+          controller: _controller,
+          initialPath: _path,
+          initialTitle: _title,
+          playlistListenable: _playlistNotifier,
+          // 网络存储播放：来源透传给竖屏页（字幕远端同名扫描要用）
+          networkSource: _networkSource,
+          // 跟随手机方向进来的竖屏页：不锁竖屏（窗口转横屏时自己 pop 回本页）
+          followPhoneRotation: followPhone,
+          // 控制层显隐/锁定两页共用一份：切过去沿用当前状态，离开前交回来
+          initialControlsVisible: _controlsVisible,
+          initialLocked: _locked,
+          onStateReport: _onPortraitStateReport,
+          // B 站番剧：竖屏页同样能看剧集列表并切集（切集实际由本页执行）
+          biliPlaylist: widget.biliPlaylist,
+          initialBiliEpId: _biliMedia?.epId,
+          onBiliEpisodeSelected: _switchToBiliEpisode,
+          // 番剧播放列表排序也由本页持有（竖屏面板读同一份、切换回报本页）
+          biliSortListenable: _biliSort,
+          onBiliSortChanged: _onBiliSortChanged,
+          // 网络存储列表切集同样由本页执行（回环流的注册与释放都在本页，
+          // 竖屏页只负责同步自身 UI）
+          onNetworkVideoSelected: _switchToNetworkVideo,
+          // 播放列表面板换排序同样由本页重排（共享同一份播放列表与排序状态）
+          playlistSortListenable: _playlistSort,
+          mainSort: _mainSort,
+          sortFields: _playlistSortFields,
+          onPlaylistSortChanged: _applyPlaylistSort,
+          initialResumeVisible: resumeVisible,
+          onResumeDismissed: () {
+            if (!mounted) return;
+            setState(() => _resumeVisible = false);
+          },
+          onVideoChanged: (path, title) {
+            if (!mounted) return;
+            setState(() {
+              _path = path;
+              _title = title;
+              _positionNotifier.value = _player.state.position;
+              _durationNotifier.value = _player.state.duration;
+              _dragPositionNotifier.value = null;
+            });
+          },
+          onExitPlayer: _exitWithPortrait,
+          // 章节功能：共享横屏页跟踪器（同一 Player，状态一致）；
+          // 不传则竖屏页自建空实例、章节标记/胶囊在竖屏全部不显示
+          chapterTracker: _chapterTracker,
+          // 片头片尾：共享横屏页跟踪器（同一 Player，状态一致）
+          introOutroTracker: _introOutroTracker,
+          // 音量增强/倍速/手势指示器/缩放：共享横屏页会话状态（B4/D2 治本——
+          // 竖屏不再自建一份音量/倍速实现，P1-1/P1-2/P1-4/P1-5 根因消除）
+          sessionState: _session,
+          // 字幕功能：共享横屏页控制器（同一 Player，切集后统一重新应用）
+          subtitleController: _subtitleController,
+          // 音频功能：共享横屏页控制器（同一 Player，切集后统一重新应用）
+          audioController: _audioController,
+          // 弹幕功能：共享横屏页控制器（同一 Player，渲染层 rebind）
+          danmakuController: _danmakuController,
+        ),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+    if (!mounted) return;
+    _portraitActive = false;
+    setState(() {});
+    // 竖屏页退出时恢复了「edgeToEdge」，返回后重新应用方向+沉浸式；
+    // 播放从未中断，无需 seek/play。
+    // ⚠️ 若用户是在竖屏页按返回退出整个播放器（_exitWithPortrait），
+    // _exiting 已置位：这里**不能再恢复横屏**，否则会和 _exitPlayer 的
+    // 竖屏恢复竞争，导致退出后列表页先横屏再竖屏（用户反馈的闪烁根因）。
+    if (_exiting) return;
+    // 跟随手机方向：
+    // - 窗口已转横屏（重力感应触发的 pop）→ 继续跟随，方向仍交还系统；
+    // - 窗口还是竖屏（用户点「选择屏幕」手动切回来的）→ 手动接管，本次播放
+    //   不再跟随（用户明确要了这个方向，不该被重力立刻转回去），按原来的
+    //   方式恢复横屏。
+    if (_followPhoneRotation && !_windowIsPortrait) {
+      PlayerOrientation.apply(PlayerOrientation.appDefault);
+    } else {
+      _followPhoneRotation = false;
+      PlayerOrientation.apply(PlayerOrientation.landscape);
+    }
+    _enterFullscreen();
+    _resetHideTimer();
+  }
+
+  /// 竖屏页 EOF「自动退出」/ 竖屏返回：先完成退出准备（保存进度/恢复设备/
+  /// **把方向交还系统**与恢复系统 UI），此时竖屏页仍盖住横屏页、用户看不到
+  /// 底下画面；再关掉播放页**及其上方所有路由**（竖屏页、打开着的面板/弹窗；
+  /// 均为无动画 pop，直接回到列表）。
+  ///
+  /// ⚠️ v5 重写（用户反馈 v4 仍有「当前帧竖屏界面」闪现、黑屏淡出也嫌生硬）：
+  /// 先把退出准备做完（这期间竖屏页全程在栈顶遮住横屏页），随后 `_exiting`
+  /// 置黑化遮罩盖住下层横屏页，再关掉播放页及上方所有路由——主播放路由与
+  /// 竖屏页路由的出场均为瞬时（无退出动画，见 playerPageRoute），任何时刻
+  /// 看不到「两层页面同框 / 半屏过渡」。
+  void _exitWithPortrait() {
+    if (!mounted || _exiting) return;
+    _exiting = true;
+    unawaited(_finishExitWithPortrait());
+  }
+
+  Future<void> _finishExitWithPortrait() async {
+    if (!mounted) return;
+    // 0. 先关掉压在竖屏页上的面板/弹窗（同 [_exitPlayer]）：竖屏页本身不是
+    //    弹层，会留到最后和横屏页一起关
+    final hadOverlay = popOverlaysAbove(context);
+    // 1. 下层黑化（此刻被竖屏页完全盖住，用户无感）：pop 后下层只能渲染纯黑
+    setState(() => _exitBlackout = true);
+    // 2. 同一帧冻结出帧：pause 后 mpv 零新帧，末帧随瞬时 pop 消失
+    try {
+      await _player.pause();
+    } on AssertionError {
+      // 播放器已销毁：静默
+    }
+    // 3. 方向与 IO 并行、不阻塞 pop
+    // 方向交还系统（App 默认策略）：退出播放后要跟随系统自动旋转/用户旋转
+    // 锁定，不能把播放期的竖屏/横屏钉死在 Activity 上（否则退出后系统自动
+    // 旋转失效，只能重启 App——用户反馈的根因）
+    unawaited(PlayerOrientation.restoreAppDefault());
+    unawaited(_saveProgress(forcePersist: true));
+    unawaited(_restoreDeviceState());
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await _waitOverlayExit(hadOverlay);
+    // 4. 关播放页：连同压在它上面的所有路由（竖屏页、面板/弹窗）一起关
+    //    （固定 pop 次数会被打开着的面板吃掉，播放页留在栈里且 _exiting
+    //    已置位 → 返回全部失效，见 popRouteAndAbove）
+    if (!mounted) return;
+    popRouteAndAbove(context);
+  }
+
+  /// 听视频（工作.md 第 10 点）：右上角槽位/「更多 → 听视频」进入。
+  ///
+  /// 与竖屏页同思路：**共享同一个 [Player]**（音频零中断），听视频页只是
+  /// 一个竖屏的「只播音频」界面——不新建播放器、不 open、不恢复进度。
+  /// 本页打开期间 EOF 让位给听视频页（[_audioActive]），返回后恢复方向
+  /// 与沉浸式全屏。
+  Future<void> _openAudioPlayer() async {
+    // 重入 / 互斥守卫（B3/P2-1）：连点「听视频」会 push 两个听视频页；竖屏页
+    // 打开期间同样不允许（三者共享同一 Player 与方向/系统 UI 状态）。
+    if (_audioActive.value || _portraitActive) return;
+    _hideTimer?.cancel();
+    _audioActive.value = true;
+    if (mounted) setState(() {});
+    await PlayerOrientation.apply(PlayerOrientation.portrait);
+    if (!mounted) return; // 防异步间隙后使用过期 context
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        settings: const RouteSettings(name: playerRouteName),
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, _, _) => AudioPlayerPage(
+          player: _player,
+          initialPath: _path,
+          initialTitle: _title,
+          playlist: _playlist,
+          // 网络存储播放：来源透传给听视频页（歌单定位与切歌都按远端路径）
+          networkSource: _networkSource,
+          // 网络歌单切歌由本页执行（回环流的注册与释放都在本页）
+          onNetworkVideoSelected: _switchToNetworkVideo,
+          // 听视频页内切歌后同步最新 path/title 给本页
+          onVideoChanged: (path, title) {
+            if (!mounted) return;
+            setState(() {
+              _path = path;
+              _title = title;
+              _positionNotifier.value = _player.state.position;
+              _durationNotifier.value = _player.state.duration;
+              _dragPositionNotifier.value = null;
+            });
+          },
+        ),
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+    if (!mounted) return;
+    _audioActive.value = false;
+    setState(() {});
+    // 听视频页可能已切集：按当前媒体状态重新初始化片头片尾跟踪
+    // （位置 > 0 按恢复点处理不跳片头；新集从头播则正常评估）
+    final audioPos = _player.state.position;
+    if (audioPos > Duration.zero) {
+      _introOutroTracker.reset();
+      _introOutroTracker.markResumedPosition(
+        audioPos,
+        _player.state.duration,
+      );
+      _introOutroTracker.markReady();
+    }
+    // 听视频页是竖屏，返回后恢复方向 + 沉浸式（与竖屏页返回一致）：
+    // 跟随手机方向 → 交还系统（继续按手机方向）；否则按「视频方向」设置
+    if (_followPhoneRotation) {
+      await PlayerOrientation.restoreAppDefault();
+    } else {
+      final lockPortrait =
+          _settings.videoOrientation == VideoOrientationMode.portrait;
+      await PlayerOrientation.apply(
+        lockPortrait ? PlayerOrientation.portrait : PlayerOrientation.landscape,
+      );
+    }
+    _enterFullscreen();
+    _resetHideTimer();
+    // 跟随手机方向：听视频页期间窗口被锁在竖屏，返回后要按手机方向重新对齐
+    unawaited(_syncPageWithPhoneOrientation());
+  }
+
+  /// 补全兄弟视频列表：入口没传 [PlayerPage.playlist] 时（首页「最近播放」、
+  /// 历史记录、外部打开、网络存储播放），按当前视频所在文件夹反查——
+  /// 本地走媒体库（[VideoScanner.folderSiblingsOf]），网络存储走远端列目录
+  /// （[NetworkPlaylistSource.siblingVideosOf]：媒体路径是回环代理 URL，
+  /// 本地那条链路对它恒不成立）。
+  ///
+  /// 失败（权限被拒 / 通道异常 / 在线流 / 远端超时）保持空表即可——播放页本身
+  /// 不依赖它，只是「下一集」与播放列表面板会空着，不能因此打断播放。
+  Future<void> _loadFolderPlaylist() async {
+    // B 站在线播放没有本地兄弟列表（其剧集列表走 [PlayerPage.biliPlaylist]）
+    if (_biliMedia != null) return;
+    final networkSource = _networkSource;
+    if (networkSource != null) {
+      await _loadNetworkFolderPlaylist(networkSource);
+      return;
+    }
+    final List<VideoFile> videos;
+    try {
+      videos = await VideoScanner.folderSiblingsOf(_path);
+    } catch (e, s) {
+      debugPrint('补全同目录视频列表失败: $e\n$s');
+      return;
+    }
+    if (_disposed || !mounted || videos.isEmpty) return;
+    _setEntryPlaylist(videos);
+  }
+
+  /// 网络存储：按「连接 id + 当前视频远端路径」列同目录视频补全列表。
+  ///
+  /// 列表项身份是**远端路径**（见 [_playlistKey]），切集由
+  /// [_switchToNetworkVideo] 为目标文件注册新的回环流。
+  Future<void> _loadNetworkFolderPlaylist(VideoFile source) async {
+    final connectionId = source.connectionId;
+    final remotePath = source.remotePath;
+    if (connectionId == null || remotePath == null || remotePath.isEmpty) {
+      return;
+    }
+    final videos = await networkPlaylistSource.siblingVideosOf(
+      connectionId: connectionId,
+      remotePath: remotePath,
+    );
+    if (_disposed || !mounted || videos.isEmpty) return;
+    // 补全结果按网络浏览页的排序重排（入口没传就按默认名称升序）：
+    // 播放列表「跟随主界面」的顺序必须与网络页看到的一致
+    _setEntryPlaylist(
+      sortNetworkPlaylistVideos(videos, widget.networkSort ?? const NetworkSort()),
+    );
+  }
+
+  /// 底栏「列表」按钮：右侧滑入播放列表面板（工作.md 第 7 点）。
+  ///
+  /// 内容 = 当前视频所在文件夹的视频（从 [_playlist] 按同目录过滤），
+  /// 面板顶部可切换排序（字段 × 方向，或「跟随主界面」）；点击列表项 →
+  /// [_switchToVideo] 统一切集（自动获得进度记忆 + 新集进度恢复），面板随后关闭。
+  ///
+  /// 面板里换排序会回调 [_applyPlaylistSort] 重排实际播放列表：面板显示的顺序
+  /// 与「下一集 / 自动连播 / 列表循环」走的顺序必须一致。
+  Future<void> _openPlaylistPanel() async {
+    final l10n = AppLocalizations.of(context);
+    _hideTimer?.cancel();
+    // B 站番剧：展示整季剧集（面板顶部可切名称升/降序 / 番剧顺序）
+    final bili = widget.biliPlaylist;
+    if (_biliMedia != null && bili != null && bili.isNotEmpty) {
+      await showPlayerPanel(
+        context,
+        pages: [
+          PlayerPanelPage(
+            title: l10n.playerPlaylist,
+            body: PlayerBiliPlaylistPanel(
+              playlist: bili,
+              currentEpId: _biliMedia?.epId,
+              sort: _biliSort.value,
+              onSortChanged: _onBiliSortChanged,
+              onSelect: (item) {
+                if (item.epId == _biliMedia?.epId) return; // 选当前集：不动作
+                _switchToBiliEpisode(item);
+              },
+            ),
+          ),
+        ],
+      );
+      _resetHideTimer();
+      return;
+    }
+    await showPlayerPanel(
+      context,
+      pages: [
+        PlayerPanelPage(
+          title: l10n.playerPlaylist,
+          body: PlayerPlaylistPanel(
+            playlistListenable: _playlistNotifier,
+            folder: folderOfPath(_playlistKey),
+            currentPath: _playlistKey,
+            mainSort: _mainSort,
+            sortFields: _playlistSortFields,
+            initialChoice: _playlistSort.value,
+            onChoiceChanged: _applyPlaylistSort,
+            onSelect: (video) {
+              if (video.path == _playlistKey) return; // 选当前项：不动作
+              _switchToVideo(video);
+            },
+          ),
+        ),
+      ],
+    );
+    _resetHideTimer();
+  }
+
+  // ── 恢复进度 ────────────────────────────────────────────
+
+  /// 恢复到位后显示「已恢复上次播放进度」指示器。
+  ///
+  /// 同步显示（无需延迟）：[PlayerResumeIndicator] 自带 300ms 进场动画，
+  /// 与「揭开封层 + 开始播放」自然错峰；且在 [_applyVideoOrientation] 推入
+  /// 竖屏页之前 [_resumeVisible] 已置位，锁定竖屏/竖拍视频的指示器能被
+  /// [initialResumeVisible] 正确接住（v5 修复：延迟显示会导致竖屏页抢不到）。
+  void _showResumeIndicator() {
+    if (!mounted) return;
+    setState(() => _resumeVisible = true);
+  }
+
+  /// 指示器「重头开始」：seek 0 并继续播放（指示器随后自行关闭）
+  void _restartFromResume() {
+    _player.seek(Duration.zero);
+    _player.play();
+  }
+
+  // ── 播放完成（EOF）──────────────────────────────────────
+
+  /// 播放完成处理：参考 kt 项目 `handleEndOfFile()` 的优先级链
+  /// （单集循环 → 自动连播 → 列表循环 → 自动退出 → 自动暂停），带防重入。
+  ///
+  /// 防重入：[_isSwitchingVideo]（切集时 mpv 会对旧文件发 EOF 事件）与
+  /// [_isHandlingEndOfFile]（completed 流重复触发）双标志；
+  /// 再校验时长已知且位置已到结尾（`duration - 1s` 容差），
+  /// 过滤切集瞬间的异常事件。
+  void _onPlaybackCompleted() {
+    // 竖屏页/听视频页打开期间：横竖屏/听视频共享同一 Player，completed
+    // 由对应页面处理（本页再处理会重复切集/退出）
+    if (_portraitActive || _audioActive.value) return;
+    if (_isSwitchingVideo || _isHandlingEndOfFile) return;
+    if (!mounted) return;
+    if (_duration <= Duration.zero) return;
+    if (_position < _duration - const Duration(seconds: 1)) return;
+    _isHandlingEndOfFile = true;
+    try {
+      final action = resolveEndOfFileAction(
+        loopMode: _settings.loopMode,
+        autoNext: _settings.autoNext,
+        autoExit: _settings.autoExit,
+        hasPlaylist: _hasAnyPlaylist,
+        hasNext: _hasNext,
+      );
+      switch (action) {
+        case EndOfFileAction.replayCurrent:
+          // 单集循环：seek 0 重播（media_kit seek 会重置 completed，可再次触发）
+          _player.seek(Duration.zero);
+          _player.play();
+        case EndOfFileAction.playNext:
+          _markCompleted();
+          _playNext();
+        case EndOfFileAction.playFirst:
+          _markCompleted();
+          _playFirst();
+        case EndOfFileAction.exitPlayer:
+          _markCompleted();
+          _exitPlayer();
+        case EndOfFileAction.pauseAtEnd:
+          // 自动暂停：seek 到末尾后 pause（停在结尾）
+          _markCompleted();
+          _player.seek(_duration);
+          _player.pause();
+          // 播完引起的暂停不自动呼出，这里显式补上（让用户看到播放键）
+          _revealControls();
+      }
+    } finally {
+      _isHandlingEndOfFile = false;
+    }
+  }
+
+  /// 播放到结尾：把进度记为「已看完」（= 时长），视频列表据此显示已看完。
+  /// 在切集/退出前调用（对应 src 的 `savePlaybackStateAsCompleted`）。
+  ///
+  /// 写入值取「mpv 时长」与「列表登记时长（`VideoFile.durationMs`）」的较大者
+  /// （B3 真机实测：二者差毫秒级时，阈值 100% 的卡片判不出「已看完」——卡片
+  /// 用的正是 `VideoFile.durationMs`）。落盘与「不得被后续保存覆盖」由
+  /// [PlaybackProgressService.markCompleted] 负责。
+  void _markCompleted() {
+    final mark = completedMarkDuration(
+      _duration,
+      listDurationMs: _listDurationMsFor(_path),
+    );
+    if (mark <= Duration.zero) return;
+    PlaybackProgressService.instance.markCompleted(_path, mark);
+  }
+
+  /// 播放列表里该视频登记的时长（毫秒；0 = 未知/不在列表内）
+  int _listDurationMsFor(String path) {
+    for (final v in _playlist) {
+      if (v.path == path) return v.durationMs;
+    }
+    return 0;
+  }
+
+  // ── 退出与进度 ──────────────────────────────────────────
+
+  /// 退出播放器：保存进度、恢复设备状态（音量/亮度）、**把方向交还系统**与
+  /// 恢复系统 UI，再 pop 回列表。
+  ///
+  /// ⚠️ v5 重写（用户反馈 v4：退出仍有错向界面闪现，黑屏淡出也嫌生硬）：
+  /// - **不加固定延时、不盖黑屏**：立即发起方向恢复（与保存/恢复并行），
+  ///   随后恢复系统 UI 并立即 pop。pop 的 200ms 淡出与系统旋转自然重叠——
+  ///   横屏页在淡出过程中转回手机方向，列表页淡入，视觉平滑；
+  ///   （唯一会等的是：退出时压着面板，等面板自己的退场动画走完，见
+  ///   [_waitOverlayExit]）
+  /// - 竖屏页路径走 [_exitWithPortrait]（先准备再关掉播放页与上方所有路由）。
+  ///
+  /// ⚠️ 方向必须是 [PlayerOrientation.restoreAppDefault]（交还系统），不能钉成
+  /// 竖屏：钉死后 Activity 的 requestedOrientation 一直是竖屏，用户开着系统
+  /// 自动旋转也转不动，只能重启 App（VR 眼镜横屏进入、播完一个视频就变竖屏
+  /// 的根因）。
+  Future<void> _exitPlayer() async {
+    if (_exiting) return;
+    _exiting = true;
+    // 0. 先关掉压在本页上的面板/弹窗：它们自带退场动画，若和播放页一起关，
+    //    会飘在返回后的列表页上方；等动画走完再关播放页（无面板时不等）
+    final hadOverlay = popOverlaysAbove(context);
+    // 1. 立即恢复方向（不阻塞，让旋转与保存/恢复并行）
+    unawaited(PlayerOrientation.restoreAppDefault());
+    // 2. 同一帧冻结出帧：pause 后 mpv 零新帧（flutter#188300 不复发），
+    //    末帧留在纹理上随转场消失，不再是「黑屏渐隐」
+    try {
+      await _player.pause();
+    } on AssertionError {
+      // 播放器已销毁：静默
+    }
+    // 3. 保存进度 + 恢复设备状态不阻塞 pop（交给后台链完成）
+    unawaited(_saveProgress(forcePersist: true));
+    unawaited(_restoreDeviceState());
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await _waitOverlayExit(hadOverlay);
+    // 关播放页：连带压在它上面的面板/弹窗一起关。自动退出时若有面板开着，
+    // 直接 pop 一次只会弹掉面板、播放页留下且 _exiting 已置位（返回失效）
+    if (mounted) popRouteAndAbove(context);
+    // 播放器销毁交给 State.dispose() 幂等兜底（_disposePlayer 保留）
+  }
+
+  /// 退出前等面板的退场动画走完（面板 220~260ms）。
+  ///
+  /// 播放页退出是瞬时的：不等的话面板会带着退场动画飘到返回后的列表页上方。
+  /// 没关掉面板（或设置里关了播放界面动画）时不等，退出保持瞬时。
+  Future<void> _waitOverlayExit(bool hadOverlay) async {
+    if (!hadOverlay || !_settings.playerAnimations) return;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+  }
+
+  /// 退出前销毁播放器：停声、停出帧、释放视频纹理（SurfaceProducer）。
+  /// 幂等（widget dispose 兜底会再调一次，这里用标志防重复销毁）。
+  Future<void> _disposePlayer() async {
+    if (_playerDisposed) return;
+    _playerDisposed = true;
+    try {
+      await _player.dispose();
+    } on AssertionError {
+      // 已被销毁（重复调用）：静默
+    } catch (_) {
+      // 退出路径：播放器销毁异常也不阻塞返回列表
+    }
+  }
+
+  /// 记录播放进度（播了一部分才记，避免污染"没看过的视频"）。
+  /// [forcePersist] = true 时强制落盘（退出/切集调用，保证重启后一定
+  /// 能恢复——修复用户反馈「重启后恢复不了」的另一半根因：节流导致
+  /// 磁盘上可能没有最新进度）。
+  Future<void> _saveProgress({bool forcePersist = false}) async {
+    // 播放历史：时长回填（条目存在且时长已就绪时一次生效；
+    // 记录时未知的时长——如在线直链——在此补全，供历史列表显示时长/进度条）
+    backfillPlaybackHistoryDuration(_path, _duration);
+    if (_position.inMilliseconds > 0 &&
+        _duration.inMilliseconds > 0 &&
+        _position < _duration) {
+      // 「已看完」保护由 [PlaybackProgressService.save] 内部一次性完成
+      //（EOF 的 markCompleted 刚写的 100% 不得被本次 ~99% 覆盖，B3）
+      await PlaybackProgressService.instance.save(
+        _path,
+        _position,
+        forcePersist: forcePersist,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    // 先置销毁标志：异步打开/恢复/方向流程的每个 await 之后查它并放弃
+    //（risk_audit #2，防止恢复流程对已销毁播放器 seek 抛异常写假崩溃日志）
+    _disposed = true;
+    // 释放本页为网络列表切集注册的回环流（入口注册的首条由网络浏览页释放；
+    // 不释放会让代理与远端连接一直挂在内存里）
+    final ownNetworkUrl = _ownNetworkUrl;
+    if (ownNetworkUrl != null) {
+      unawaited(NetworkRepository.instance.releasePlayback(ownNetworkUrl));
+    }
+    WidgetsBinding.instance.removeObserver(this);
+    _hideTimer?.cancel();
+    _unlockHideTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
+    _indicatorHideTimer?.cancel();
+    _speedBarTimer?.cancel();
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _controlsController.dispose();
+    _unlockController.dispose();
+    // 共享会话状态：本页创建、本页销毁（竖屏页只借用；其滑动浮层淡出
+    // 定时器也在会话里，必须在这里释放，B4/D2）
+    _session.removeListener(_onSessionChanged);
+    _session.dispose();
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _dragPositionNotifier.dispose();
+    _playlistNotifier.dispose();
+    _playlistSort.dispose();
+    _biliSort.dispose();
+    _chapterTracker.dispose();
+    _subtitleController.dispose();
+    // 断开页面回调，避免控制器（可能被竖屏页/听视频页短暂共享）持有页面引用
+    _audioController.onAudioFallback = null;
+    _audioController.dispose();
+    _danmakuController.dispose();
+    _audioActive.dispose();
+    // 后处理服务是单例：解绑本页播放器，避免持有已销毁的实例
+    PostProcessService.instance.detach();
+    _thumbHideTimer?.cancel();
+    _cancelThumbPrefetch();
+    // 兜底保存进度（正常退出已走 _exitPlayer 的强制落盘，这里防异常路径；
+    // dispose 无法 await，交给后台链串行完成）
+    _saveProgress();
+    // 兜底恢复设备状态（正常退出已走 _exitPlayer，这里防异常路径泄漏）
+    _restoreDeviceState();
+    DeviceServices.clearFrameCache();
+    // 退出时把方向交还系统（App 默认策略）+ 恢复系统 UI：
+    // ⚠️ 不能钉成竖屏——钉死后系统自动旋转失效，只能重启 App（用户反馈根因）
+    unawaited(PlayerOrientation.restoreAppDefault());
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    // 兜底销毁播放器（正常退出已先 pause 冻结出帧，这里销毁释放纹理；
+    // 幂等，不会重复销毁）
+    unawaited(_disposePlayer());
+    // 停止 B 站流代理（mbedTLS 绕过的本地 HTTP 服务，退出即释放端口）
+    BiliStreamProxy.instance.stop();
+    // 停止投屏局域网媒体服务器（本地文件暴露给电视的 HTTP 服务，退出即释放端口）
+    LanMediaServer.instance.stop();
+    super.dispose();
+  }
+
+  /// 直连播放（打开链接/外部直链）的网速兜底来源：读 mpv `cache-speed`
+  /// 只读属性（demuxer 缓存的网络吞吐估计，字节/秒）。这类播放 mpv 直连
+  /// 远程 URL、不经过任何本地代理，状态栏两个代理查询恒为 null——详见
+  /// [PlayerStatusBar.directNetSpeedReader]。
+  Future<double?> _readDirectNetSpeed() async {
+    final native = _player.platform;
+    if (native is! NativePlayer) return null;
+    try {
+      final v = await native.getProperty('cache-speed');
+      // 属性未激活（流未开/无缓存活动）时为空串 → 解析 null，保持原显示
+      return double.tryParse(v);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 时间文本显示模式：false =「已播/总时长」；true =「已播/剩余时长」
+  /// （工作.md 第 20 点，点击底栏时间文本切换）
+  bool _showRemainingTime = false;
+
+  /// 底栏时间文本：「已播/总时长」⇄「已播/剩余时长」（剩余 = 总 - 已播，
+  /// 负值清零为 -00:00，避免拖动越过结尾时出现正数）。
+  /// B4/P1-5：格式化抽到 [formatPlaybackTimeText]，横竖屏共用同一钳制实现。
+  String get _timeText => formatPlaybackTimeText(
+        position: _dragPosition ?? _position,
+        duration: _duration,
+        showRemaining: _showRemainingTime,
+      );
+
+  /// 点击底栏时间文本：切换显示模式
+  void _toggleTimeMode() {
+    setState(() => _showRemainingTime = !_showRemainingTime);
+    _resetHideTimer();
+  }
+
+  /// 缩略图预览里的章节胶囊文案：章节有标题用标题，无标题回退「第 N 章」。
+  ///
+  /// 文案在 UI 层取：`utils/chapter_utils` 按分层只回标题或章节序号。
+  String? _chapterChipLabel(Duration position) {
+    final heading = _chapterTracker.chapterHeadingAt(position);
+    if (heading == null) return null;
+    return chapterHeadingLabel(AppLocalizations.of(context), heading);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 拦截系统返回键（手势/三键），与左上角返回按钮走同一路径：
+    // 先保存进度、恢复竖屏和系统 UI，再退出，避免横屏闪烁
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _exitPlayer();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            _viewportWidth = constraints.maxWidth;
+            _viewportHeight = constraints.maxHeight;
+            return Stack(
+              children: [
+                // 视频画面（禁用默认控件；画面比例由设置驱动；
+                // 外层 Transform 承载双指缩放/平移）。
+                // 用 ListenableBuilder 监听设置：画面比例面板（独立弹窗路由）
+                // 修改 videoFit 后这里实时重建，无需关掉面板才生效
+                //（工作.md 第 8 点 bug 修复）。
+                // ⚠️ key 必须随 fit 变化（工作.md 第 3 点：4:3 → 自动失效的根因）：
+                // media_kit Video 是 StatefulWidget，fit/aspectRatio 变化时若不
+                // 换 key，内部渲染纹理的尺寸缓存不会重建，导致「从 4:3 切回自动
+                // 仍保持 4:3」——用 ValueKey(fit) 强制重建 Video。
+                Positioned.fill(
+                  child: ListenableBuilder(
+                    listenable: Listenable.merge([_settings, _audioActive]),
+                    builder: (context, _) => Transform(
+                      transform: _session.zoomMatrix(_viewportWidth, _viewportHeight),
+                      // 画面翻转：在缩放外层再套一层镜像（绕自身中心，不影响
+                      // 缩放/平移）。走 Flutter 而不是 mpv vf —— 本项目的
+                      // libmpv 精简构建没有 hflip / vflip 滤镜。
+                      child: Transform.flip(
+                        flipX: _session.flipHorizontal,
+                        flipY: _session.flipVertical,
+                        child: Video(
+                          key: ValueKey('fit-${_settings.videoFit.index}'),
+                          controller: _controller,
+                          controls: NoVideoControls,
+                          fit: _settings.videoFit.boxFit,
+                          aspectRatio: _settings.videoFit.aspectRatio,
+                          // 听视频页打开期间退后台不暂停（后台播放）；否则保持
+                          // 默认「退后台暂停」。
+                          pauseUponEnteringBackgroundMode: !_audioActive.value,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 弹幕层（弹幕移植方案阶段1）：视频层与手势层之间；
+                // DanmakuScreen 内部自带 IgnorePointer 不拦截手势；
+                // 与视频缩放 Transform 无关（弹幕铺满整个播放区域）。
+                // B4/P2-7：竖屏页/听视频页在栈顶时本层不可见 → 不再接收新弹幕
+                //（省掉被遮住那一层每条弹幕的排版 + 图片录制）
+                Positioned.fill(
+                  child: PlayerDanmakuLayer(
+                    controller: _danmakuController,
+                    visible: !_portraitActive && !_audioActive.value,
+                  ),
+                ),
+                // 手势层：单击/双击/长按（+左右滑动调速）/单指滑动
+                // （音量·亮度·进度）/双指缩放平移
+                Positioned.fill(
+                  child: PlayerGestureLayer(
+                    locked: _locked,
+                    onTap: _toggleControls,
+                    onDoubleTap: (pos) => _handleDoubleTap(pos.dx, width),
+                    onLongPressStart: _onLongPressStart,
+                    onLongPressUpdate: _onLongPressUpdate,
+                    onLongPressEnd: _onLongPressEnd,
+                    onSwipeStart: _onSwipeStart,
+                    onVerticalSwipe: _onVerticalSwipe,
+                    onHorizontalSwipe: _onHorizontalSwipe,
+                    onSwipeEnd: _onSwipeEnd,
+                    onSwipeCancel: _onSwipeCancel,
+                    onZoomStart: _onZoomStart,
+                    onZoomUpdate: _onZoomUpdate,
+                    onZoomEnd: _onZoomEnd,
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+                // 控制层（锁定后全部隐藏）：
+                // 顶栏顶部下落 / 底栏底部上升 / 右侧操作右侧滑入（Kazumi 风格）。
+                // 顶部为「时间/电量信息行（工作.md 第 12 点）+ 顶栏」两段，
+                // 信息行轻量提示、字号小于标题，整体随控制层一起滑入滑出。
+                // ⚠️ 顶部渐变压暗统一放在这里（信息行 + 顶栏整体一个连续
+                // 渐变：顶部最暗 → 向下淡出）。各组件不再各自画渐变，
+                // 否则两段渐变拼接会在时间/电量行下方出现暗色断层
+                // （用户反馈 v2：阴影位置不正确、割裂感）。
+                IgnorePointer(
+                  ignoring: !_controlsVisible || _locked,
+                  child: SlideTransition(
+                    position: _topSlide,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.72),
+                              Colors.black.withValues(alpha: 0.3),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PlayerStatusBar(
+                              isOnlinePlayback: isOnlineMedia(_path),
+                              streamUrl: isOnlineMedia(_path) ? _path : null,
+                              directNetSpeedReader: _readDirectNetSpeed,
+                              // B4/P2-6：竖屏页/听视频页在栈顶时本页被遮住
+                              // → 停掉四个定时器（原先两页定时器全在跑）
+                              active: !_portraitActive && !_audioActive.value,
+                            ),
+                            PlayerTopBar(                            title: _title,
+                              onBack: _exitPlayer,
+                              onMore: _openMorePanel,
+                              onActionTap: _handleSlotAction,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 跳过胶囊浮层 + 底栏主体：胶囊贴底栏顶部（章节名称上方），
+                // 独立于底栏滑出动画（自动弹出期间控制层隐藏也可见）。
+                // ⚠️ 必须 Positioned 钉在底部：Stack 非 Positioned 子项
+                // 默认摆放到 topLeft，底栏会整个跑到屏幕顶部（错位 bug）
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 跳过胶囊（工作.md 第 4 点）：进入 OP/ED 等片段自动弹出
+                      // （5 秒倒计时自动消失）；控制层可见且仍在片段内时常驻；
+                      // 回拖进片段可重复触发。left 28 与进度条轨道起点/
+                      // 章节名称行同左缘对齐（横屏）。
+                      ListenableBuilder(
+                        listenable: _chapterTracker,
+                        builder: (context, _) {
+                          final seg = _chapterTracker.activeSegment;
+                          final visible = seg != null &&
+                              !_locked &&
+                              (_chapterTracker.autoChipVisible ||
+                                  _controlsVisible);
+                          return AnimatedOpacity(
+                            opacity: visible ? 1 : 0,
+                            duration: const Duration(milliseconds: 250),
+                            child: IgnorePointer(
+                              ignoring: !visible,
+                              child: seg == null
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 28,
+                                        bottom: 8,
+                                      ),
+                                      child: ChapterSkipChip(
+                                        type: seg.type,
+                                        onTap: _skipCurrentSegment,
+                                      ),
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                      IgnorePointer(
+                        ignoring: !_controlsVisible || _locked,
+                        child: SlideTransition(
+                          position: _bottomSlide,
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            // 局部订阅进度 + 章节 + 弹幕开关：位置/时长/章节
+                            // 变化只重建底栏（进度条 + 时间文本 + 章节标记 +
+                            // 弹幕图标），不重建整页（risk_audit #1）
+                            child: ListenableBuilder(
+                              listenable: _bottomBarListenable,
+                              builder: (context, _) => PlayerBottomBar(
+                                valueMs: (_dragPosition ?? _position)
+                                    .inMilliseconds
+                                    .toDouble(),
+                                maxMs: _duration.inMilliseconds > 0
+                                    ? _duration.inMilliseconds.toDouble()
+                                    : 1.0,
+                                onSeekChanged: (v) {
+                                  _dragPositionNotifier.value =
+                                      Duration(milliseconds: v.round());
+                                  _requestThumbnail(v.round());
+                                  _resetHideTimer();
+                                },
+                                onSeekEnd: (v) {
+                                  // 松手落在「缩略图显示的那一帧」的精确时刻：
+                                  // 与 [_requestThumbnail] 用同一个秒桶（四舍五入），
+                                  // 配合 hr-seek=absolute + hr-seek-framedrop=no
+                                  // （media_kit 初始化已设）→ 帧级精确、不丢目标帧，
+                                  // 屏幕上出现的就是刚才预览的那张画面。
+                                  // 钳到时长内：四舍五入后的桶可能比末尾多出最多 0.5s。
+                                  final bucket = DeviceServices.thumbnailBucketMs(
+                                          v.round())
+                                      .clamp(0, _duration.inMilliseconds);
+                                  _player.seek(Duration(milliseconds: bucket));
+                                  _dragPositionNotifier.value = null;
+                                  _hideThumbPreview();
+                                  // 空闲后预取邻近秒桶，下次拖到附近秒显
+                                  _scheduleThumbPrefetch(bucket);
+                                  _resetHideTimer();
+                                },
+                                hasNext: _hasNext,
+                                onNext: _playNext,
+                                timeText: _timeText,
+                                onTimeTap: _toggleTimeMode,
+                                onSpeedTap: _openSpeedPanel,
+                                showSpeedButtonBackground:
+                                    _settings.showButtonBackground,
+                                superResolutionLabel:
+                                    AppLocalizations.of(context)
+                                        .playerSuperResolution,
+                                onSuperResolutionTap: _openSuperResolutionPanel,
+                                onScreenSwitchTap: _openPortraitPlayer,
+                                showScreenSwitchBackground:
+                                    _settings.showButtonBackground,
+                                // 工作.md 第 4 点：列表按钮背景与倍速按钮同开关
+                                showListButtonBackground:
+                                    _settings.showButtonBackground,
+                                onPlaylistTap: _openPlaylistPanel,
+                                // 章节功能（工作.md）：「显示章节进度条」开关
+                                // 只控制进度条上的圆点与章节名称行；
+                                // 跳过色段与胶囊属于动漫跳过，强制开启不受开关影响
+                                chapters: _settings.showChapterProgress
+                                    ? _chapterTracker.chapters
+                                    : const [],
+                                skipSegments: _chapterTracker.skipSegments,
+                                currentChapterName:
+                                    _settings.showChapterProgress
+                                        ? _chapterTracker.currentChapterTitle
+                                        : null,
+                                onChapterTap: _openChapterPanel,
+                                // 弹幕功能（阶段1）：开关 + 设置按钮，
+                                // 位于时间文本右侧（工作.md 弹幕第 5 点）
+                                danmakuOn: _danmakuController.danmakuOn,
+                                onDanmakuToggle: _toggleDanmaku,
+                                onDanmakuSettingsTap: _openDanmakuSettingsPanel,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 右侧操作（截图 / 锁定，从右侧滑入）
+                IgnorePointer(
+                  ignoring: !_controlsVisible || _locked,
+                  child: SlideTransition(
+                    position: _rightSlide,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: PlayerRightActions(
+                          locked: _locked,
+                          onScreenshot: _takeScreenshot,
+                          onToggleLock: _toggleLock,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 中央控制簇（淡入）
+                IgnorePointer(
+                  ignoring: !_controlsVisible || _locked,
+                  child: FadeTransition(
+                    opacity: _controlsController,
+                    child: Center(
+                      child: PlayerCenterCluster(
+                        seekSeconds: _settings.seekSeconds,
+                        playing: _playing,
+                        onSeekBackward: () => _seekBy(-_settings.seekSeconds),
+                        onSeekForward: () => _seekBy(_settings.seekSeconds),
+                        onTogglePlay: _togglePlay,
+                      ),
+                    ),
+                  ),
+                ),
+                // 锁定状态：左右两侧滑入解锁按钮（单击屏幕可呼出/隐藏）
+                if (_locked)
+                  SlideTransition(
+                    position: _leftUnlockSlide,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: _UnlockButton(onTap: _unlock),
+                      ),
+                    ),
+                  ),
+                if (_locked)
+                  SlideTransition(
+                    position: _rightUnlockSlide,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: _UnlockButton(onTap: _unlock),
+                      ),
+                    ),
+                  ),
+                // 双击快进/快退反馈徽章（贴近横屏顶部区域，但不完全贴边）
+                if (_seekFeedback != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 20,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 150),
+                          child: Container(
+                            key: ValueKey(_seekFeedback),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              _seekFeedback!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 音量/亮度手势指示器：音量在左侧、亮度在右侧（对称），
+                // kazumi 风格：从屏幕边缘滑入（音量从左、亮度从右）+ 淡入。
+                // 位置由 _indicatorKind 决定（退场动画期间 _indicator 为
+                // null，但仍沿用最近类型，避免退场跳边）
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Align(
+                      alignment:
+                          (_indicatorKind ?? GestureIndicatorKind.volume) ==
+                              GestureIndicatorKind.volume
+                          ? Alignment.centerLeft
+                          : Alignment.centerRight,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          left: (_indicatorKind ??
+                                      GestureIndicatorKind.volume) ==
+                                  GestureIndicatorKind.volume
+                              ? 32
+                              : 0,
+                          right: (_indicatorKind ??
+                                      GestureIndicatorKind.volume) ==
+                                  GestureIndicatorKind.brightness
+                              ? 32
+                              : 0,
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 260),
+                          switchInCurve: Curves.easeOutBack,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) {
+                            final kind = child is PlayerGestureIndicator
+                                ? child.kind
+                                : GestureIndicatorKind.volume;
+                            final fromLeft =
+                                kind == GestureIndicatorKind.volume;
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: Offset(fromLeft ? -0.35 : 0.35, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: ScaleTransition(
+                                  scale: Tween<double>(
+                                    begin: 0.92,
+                                    end: 1.0,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              ),
+                            );
+                          },
+                          child: _indicator == null
+                              ? const SizedBox.shrink(key: ValueKey('none'))
+                              : PlayerGestureIndicator(
+                                  key: ValueKey(_indicator!.kind),
+                                  kind: _indicator!.kind,
+                                  value: _indicator!.value,
+                                  boosting: _indicator!.boosting,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // 水平滑动 seek 预览浮层（居中）
+                if (_session.swipeSeekData != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: PlayerSwipeSeekOverlay(
+                          target: _session.swipeSeekData!.target,
+                          delta: _session.swipeSeekData!.delta,
+                          visible: _session.swipeSeekVisible,
+                        ),
+                      ),
+                    ),
+                  ),
+                // 长按倍速指示器（顶部居中；含倍速条与首次使用提示）
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 15,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: PlayerSpeedIndicator(
+                        speed: _longPressSpeed,
+                        visible: _longPressing &&
+                            _settings.showSpeedIndicator,
+                        dynamicActive: _dynamicSpeedActive,
+                        showBar: _speedBarVisible,
+                        showHint: !_settings.speedHintShown,
+                        presets: dynamicSpeedPresets(),
+                      ),
+                    ),
+                  ),
+                ),
+                // 进度条拖动缩略图预览（进度条上方跟随拖动位置；
+                // 松手淡出后再卸载）；bottom 96 = 轨道下移 8px 后同步
+                if (_thumbPreview != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 96,
+                    child: PlayerThumbnailPreview(
+                      frame: _thumbPreview!.frame,
+                      time: _thumbPreview!.time,
+                      fraction: _thumbFraction,
+                      visible: _thumbVisible,
+                      // 拖动位置所属章节（按预览时刻查，不按当前播放位置）
+                      chapterTitle: _chapterChipLabel(_thumbPreview!.time),
+                    ),
+                  ),
+                // 双指缩放后显示「还原画面」入口：**跟随控制层**淡入淡出
+                // （与中央簇同一份 `_controlsController`），不再常驻屏幕；
+                // 位置见 kZoomRestoreChipAlignmentY（已下移，避开播放按钮阴影）。
+                if (_session.zoomed)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: !_controlsVisible,
+                      child: FadeTransition(
+                        opacity: _controlsController,
+                        child: Align(
+                          alignment: const Alignment(
+                            0,
+                            kZoomRestoreChipAlignmentY,
+                          ),
+                          child: PlayerZoomRestoreChip(onTap: _resetZoom),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 常驻进度线（设置开启且控制层隐藏时显示；锁定后同样显示——
+                // 它只是只读展示，不带来任何误触风险，锁定后看不到进度反而
+                // 让人不知道播到哪了，用户反馈要求锁定态保留）。
+                // 内部局部订阅进度（risk_audit #1）：位置变化只重画这条线，
+                // 不重建整页；时长未知时先渲染空位（时长就绪后自动出现）。
+                if (_settings.showProgressLine && !_controlsVisible)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 2.5,
+                    child: IgnorePointer(
+                      child: ListenableBuilder(
+                        listenable: _progressListenable,
+                        builder: (context, _) {
+                          if (_duration <= Duration.zero) {
+                            return const SizedBox.shrink();
+                          }
+                          return Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              height: 2.5,
+                              color: Colors.white.withValues(alpha: 0.25),
+                              alignment: Alignment.centerLeft,
+                              child: FractionallySizedBox(
+                                widthFactor: (_position.inMilliseconds /
+                                        _duration.inMilliseconds)
+                                    .clamp(0.0, 1.0),
+                                child: Container(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                // 恢复进度指示器（横屏顶部弹出，独立于控制层显隐；z 序最顶）。
+                // 工作.md 第 2 点：出现位置上移、靠近横屏状态下顶部（原 top: 64
+                // 在顶栏下方，现提到顶部信息行/顶栏区域下方的 top: 20 附近）。
+                if (_resumeVisible)
+                  Positioned(
+                    // 稳定 key：拖动进度条时缩略图气泡（前一个条件 Positioned）
+                    // 会插入/移出 Stack children，无 key 兄弟项按索引错位匹配
+                    // 会重建 State → 指示器进场动画重播（「拖动一下唤出一次」根因）
+                    key: const ValueKey('resumeIndicator'),
+                    left: 0,
+                    right: 0,
+                    top: 20,
+                    child: Center(
+                      child: PlayerResumeIndicator(
+                        onRestart: _restartFromResume,
+                        onClose: () {
+                          if (mounted) {
+                            setState(() => _resumeVisible = false);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                // 网络加载/缓冲转圈（工作.md 第 6 点）：mpv 上报 buffering=true
+                // 时居中显示转圈，视频开头联网加载能给出反馈而非黑屏干等。
+                // 恢复进度封层（_restoring）已自带黑底转圈，二者不同时出现。
+                if (_buffering && !_restoring)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.6,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white70,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 恢复进度封层（z 序最顶）：暂停加载 + seek 期间盖住视频，
+                // 用户看不到 mpv 暂停态渲染的 0 时刻第一帧海报；位置确认
+                // 到位后揭开（_restoring 置 false）+ 播放，首帧即目标帧。
+                // 用一个小转圈提示「正在恢复」，避免纯黑让用户以为卡死。
+                if (_restoring)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        color: Colors.black,
+                        alignment: Alignment.center,
+                        child: const SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white24),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 退出黑化遮罩（z 序最顶）：竖屏退出期间盖住整个横屏页
+                // （视频 + UI 骨架），保证两层页面任何时刻不同框
+                if (_exitBlackout)
+                  const Positioned.fill(
+                    child: ColoredBox(color: Colors.black),
+                  ),
+                // 跟随手机方向 + 窗口已是竖屏、竖屏页还没就位：整页盖黑。横屏
+                // 骨架绝不能画进竖屏窗口（进入播放时竖屏页要等 open 完成才
+                // push，不盖住会闪一帧横屏布局，且会抢竖屏页的手势）；只盖一层
+                // 黑（ColoredBox 吃点击）而不是不构建，Video 不卸载、纹理不重建。
+                if (_followPhoneRotation &&
+                    _windowIsPortrait &&
+                    !_portraitActive &&
+                    !_exiting)
+                  const Positioned.fill(
+                    child: ColoredBox(color: Colors.black),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// 锁定状态下的解锁按钮（屏幕左右两侧各一个）。
+/// 固定灰黑圆角背景（与右侧截图/锁定按钮同款），点击解锁。
+class _UnlockButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _UnlockButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: IconButton(
+        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.lock_open, color: Colors.white, size: 22),
+        tooltip: l10n.playerUnlock,
+        onPressed: onTap,
+      ),
+    );
+  }
+}
+
+/// 「更多」面板中的动作行：图标 + 名称 +（副标题）+ 箭头
+class _PanelActionTile extends StatelessWidget {  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  const _PanelActionTile({
+    required this.icon,
+    required this.label,
+    this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.white),
+      title: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+      ),
+      titleAlignment: ListTileTitleAlignment.center,
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+      onTap: onTap,
+    );
+  }
+}
+
+/// 「自定义」页内的小节标题已迁到
+/// `views/player_action_grid.dart` 的 [PlayerPanelSectionLabel]（横竖屏共用）。
+

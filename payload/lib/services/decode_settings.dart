@@ -1,0 +1,160 @@
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// 解码方式档位（对齐 mpvRx / 小喵生态「自动 / 硬解 / 硬解+ / 软解」习惯）。
+///
+/// [hwdec] 为 mpv 的 `--hwdec` 值；「硬解+」为直通优先的有序回退链
+/// （`mediacodec` 在 `vo=gpu` 下可用，直通没成时由 mpv 自己落到
+/// `mediacodec-copy`，**不由本 App 事后改写档位**）。
+///
+/// 名称与说明在 `lib/l10n/label_maps.dart` 的 [decodeModeLabel] /
+/// [decodeModeDescription]；**顺序即持久化语义**（按 hwdec 字符串存），不许调整。
+enum DecodeMode {
+  autoSafe('auto-safe'),
+  hwCopy('vaapi-copy'),
+  hwPlus('vaapi,vaapi-copy,no'),
+  sw('no');
+
+  final String hwdec;
+
+  const DecodeMode(this.hwdec);
+}
+
+/// 解码性能预设（对齐 mpvRx / 小喵生态的 MPV Profile 六档）。
+///
+/// [profile] 为 **mpv 内置 profile 名**（编译在 libmpv.so 里，与 mpvRx 的
+/// `setOptionString("profile", ...)` 完全一致）；应用时写入 mpv 的 `profile`
+/// 属性（重启播放器后生效）。「default」在 mpv 内置 profile 中不存在，设为
+/// 空串表示不应用任何 profile（回到 mpv 默认行为）。
+///
+/// 名称与说明在 [decodePresetLabel] / [decodePresetDescription]。
+enum DecodePreset {
+  fast('fast'),
+  standard(''),
+  highQuality('high-quality'),
+  gpuHq('gpu-hq'),
+  lowLatency('low-latency'),
+  swFast('sw-fast');
+
+  final String profile;
+
+  const DecodePreset(this.profile);
+}
+
+/// 解码设置：全局单例，ChangeNotifier + shared_preferences 持久化。
+///
+/// 播放页创建 [VideoController] 时读取 [mode] 注入 `hwdec`/`vo`，并在初始化后
+/// 写入 [preset] 的 `profile` 属性；两者均**重启播放器（重开视频）后生效**。
+///
+/// **默认档位是「硬解+」**（直通优先 `mediacodec,mediacodec-copy,no`）：直通没成
+/// 时由 mpv 自己按这条链落到硬解拷贝、连硬解也不可用时落到软解。App 侧只在
+/// **开播前**按「用户档位 + 渲染后端」决定写入哪条链（`utils/decode_policy.dart`
+/// 的 `preferredDecodeChain`），**不会**在播放后读 `hwdec-current` 去改档位
+/// （对齐参照项目 MPVRX：`HW = mediacodec-copy` / `HWPlus = mediacodec` 只是
+/// 标签，谁都不回写设置）。当前实际生效的方法名可在播放诊断面板看到。
+class DecodeSettings extends ChangeNotifier {
+  static final DecodeSettings instance = DecodeSettings._();
+
+  DecodeSettings._();
+
+  /// 加载去重：setter 在改设置前 await [ensureLoaded]，防启动加载未完成时
+  /// 用户已改设置被 load 覆盖（同 PlayerControlsSettings 的 risk_audit #9 防护）。
+  Future<void>? _loadFuture;
+
+  /// 确保已从磁盘加载完成（首次调用触发 load；并发调用共享同一 Future）
+  Future<void> ensureLoaded() => _loadFuture ??= load();
+
+  static const _keyMode = 'decode_mode';
+  static const _keyPreset = 'decode_preset';
+  static const _keyGpuNext = 'decode_gpu_next';
+  static const _keyVulkan = 'decode_vulkan';
+
+  DecodeMode _mode = DecodeMode.hwPlus;
+
+  /// 当前解码档位（默认硬解+；用户改过则以持久化值为准）
+  DecodeMode get mode => _mode;
+
+  DecodePreset _preset = DecodePreset.fast;
+
+  /// 当前解码预设（默认快速）
+  DecodePreset get preset => _preset;
+
+  bool _gpuNext = false;
+
+  /// 是否启用 gpu-next 渲染（vo=gpu-next）。默认关闭，仍走 vo=gpu。
+  // Linux port: gpu-next 已砍，恒关（避免 Android 渲染 workaround 触发）
+  bool get gpuNext => false;
+
+  bool _vulkan = false;
+
+  /// 是否在 gpu-next 下启用 Vulkan 后端（gpu-api=vulkan）。
+  /// 仅在 [gpuNext] 开启时生效；默认关闭（gpu-next 走 OpenGL）。
+  // Linux port: Vulkan 已砍，恒关
+  bool get useVulkan => false;
+
+  /// 从磁盘加载
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyMode);
+    if (raw != null) {
+      for (final m in DecodeMode.values) {
+        if (m.hwdec == raw) {
+          _mode = m;
+          break;
+        }
+      }
+    }
+    final presetRaw = prefs.getString(_keyPreset);
+    if (presetRaw != null) {
+      for (final p in DecodePreset.values) {
+        if (p.name == presetRaw) {
+          _preset = p;
+          break;
+        }
+      }
+    }
+    _gpuNext = prefs.getBool(_keyGpuNext) ?? false;
+    _vulkan = prefs.getBool(_keyVulkan) ?? false;
+    notifyListeners();
+  }
+
+  /// 切换解码档位并持久化
+  Future<void> setMode(DecodeMode v) async {
+    await ensureLoaded();
+    if (_mode == v) return;
+    _mode = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyMode, v.hwdec);
+  }
+
+  /// 切换解码预设并持久化
+  Future<void> setPreset(DecodePreset v) async {
+    await ensureLoaded();
+    if (_preset == v) return;
+    _preset = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPreset, v.name);
+  }
+
+  /// 切换 gpu-next 渲染并持久化
+  Future<void> setGpuNext(bool v) async {
+    await ensureLoaded();
+    if (_gpuNext == v) return;
+    _gpuNext = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyGpuNext, v);
+  }
+
+  /// 切换 Vulkan 后端并持久化
+  Future<void> setVulkan(bool v) async {
+    await ensureLoaded();
+    if (_vulkan == v) return;
+    _vulkan = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyVulkan, v);
+  }
+}

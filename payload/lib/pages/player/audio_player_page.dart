@@ -1,0 +1,958 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:moumou/l10n/app_localizations.dart';
+import 'package:moumou/models/player_loop.dart';
+import 'package:moumou/models/playlist_sort.dart';
+import 'package:moumou/models/video_file.dart';
+import 'package:moumou/pages/player/views/audio_player_panels.dart';
+import 'package:moumou/pages/player/views/player_play_pause_button.dart';
+import 'package:moumou/services/device_services.dart';
+import 'package:moumou/services/fast_thumbnails.dart';
+import 'package:moumou/services/playback_progress_service.dart';
+import 'package:moumou/services/playback_tuning.dart';
+import 'package:moumou/services/player_controls_settings.dart';
+import 'package:moumou/services/super_resolution_service.dart';
+import 'package:moumou/utils/audio_shuffle.dart';
+import 'package:moumou/utils/formatters.dart';
+import 'package:moumou/utils/network_playlist.dart';
+import 'package:moumou/utils/player_orientation.dart';
+import 'package:moumou/widgets/raw_thumb_image.dart';
+
+/// 听视频界面（工作.md 第 10 点 + 阶段1 第 2 点重设计，参考小喵 KT 项目 AudioPlayerScreen）：
+///
+/// - 竖屏全屏独立界面，**共享横屏/竖屏播放页的同一个 [Player]**——
+///   不新建播放器、不 open、不恢复进度（同一会话音频零中断）；
+/// - **后台播放**（阶段1 第 2 点）：进入本页即启动前台服务保活进程，
+///   退到后台后像音乐播放器一样继续播放，退出本页时停止服务；
+/// - 只播放音频不显示视频：整页被封面高斯模糊背景覆盖，画面完全隐藏，
+///   退出后播放页从当前进度继续显示视频；
+/// - 布局：顶栏（返回 + 「听视频」）+ 居中封面（1:1 圆角）+ 标题 +
+///   进度条（拖动 seek）+ 底部控制卡（倍速 | 上一集 | 播放/暂停 | 下一集 |
+///   播放列表）；播放/暂停与其余按钮同尺寸同水平线，切换带图标形变动画；
+/// - 倍速范围 **0.5 – 4.0，步进 0.5**（档位见 `_speedOptions()`）；
+///   倍速/播放列表面板为**深色胶囊风格**
+///   （见 [audio_player_panels.dart]），均带右上角关闭按钮；
+/// - **定时关闭**（阶段1 第 2 点）：15/30/60 分钟或播完当前曲目，到时自动暂停；
+/// - 列表面板支持**随机播放**（时间刻算法 [audioShuffleNextIndex]）与
+///   **循环模式三态**（关闭 / 单曲循环 / 列表循环）；循环值复用播放页的全局
+///   设置 `PlayerControlsSettings.loopMode`（持久化，两处联动），随机播放则是
+///   本页局部状态；
+/// - 本界面内切歌**不恢复上次进度**（每首从 0 开始，像听歌一样）；
+///   切走前保存原视频进度，退出界面后播放页从对应进度继续。
+///
+/// 由播放页「更多 → 听视频」push（竖屏），退出后由 push 方恢复横屏方向
+/// 与沉浸式全屏。
+class AudioPlayerPage extends StatefulWidget {
+  /// 共享播放器（播放页创建并持有，本页只使用、不 dispose）
+  final Player player;
+
+  /// 进入时正在播放的视频路径
+  final String initialPath;
+
+  /// 进入时正在播放的视频标题
+  final String initialTitle;
+
+  /// 兄弟视频列表（「上一集/下一集」与播放列表用，可空）
+  final List<VideoFile>? playlist;
+
+  /// 当前媒体的网络存储来源（null = 本地文件）：网络播放的媒体路径是回环
+  /// 代理 URL，歌单定位/切歌要按**远端路径**（见 [playlistKeyOf]），切歌还要
+  /// 由播放页注册新流（[onNetworkVideoSelected]）。
+  final VideoFile? networkSource;
+
+  /// 网络歌单切歌回调（播放页实现：注册目标文件的回环流 + 开新流 + 释放旧流）。
+  /// 返回新媒体的 (path, title)；失败返回 null。
+  final Future<({String path, String title})?> Function(VideoFile video)?
+      onNetworkVideoSelected;
+
+  /// 本页切歌后通知播放页同步最新 path/title
+  final void Function(String path, String title)? onVideoChanged;
+
+  const AudioPlayerPage({
+    super.key,
+    required this.player,
+    required this.initialPath,
+    required this.initialTitle,
+    this.playlist,
+    this.networkSource,
+    this.onNetworkVideoSelected,
+    this.onVideoChanged,
+  });
+
+  @override
+  State<AudioPlayerPage> createState() => _AudioPlayerPageState();
+}
+
+class _AudioPlayerPageState extends State<AudioPlayerPage> {
+  late final Player _player;
+
+  late String _path;
+  late String _title;
+
+  /// 当前媒体的网络存储来源（null = 本地文件）；网络歌单切歌后随之更新
+  VideoFile? _networkSource;
+
+  /// 当前媒体在歌单里的身份（网络项按远端路径，见 [playlistKeyOf]）
+  String get _playlistKey => playlistKeyOf(_path, _networkSource);
+
+  /// 播放位置/时长：位置流高频更新只走 ValueNotifier，进度区局部订阅
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier = ValueNotifier(Duration.zero);
+  Duration? _dragPosition;
+
+  bool _playing = false;
+  double _speed = 1.0;
+
+  /// 进入本页时共享播放器的原始倍速 + 用户是否在本页改过倍速。
+  ///
+  /// 本页档位是 0.5–4.0、步进 0.5，进入时会把当前倍速**吸附**到最近档位
+  /// （否则「显示 1.5x、实际 1.25x」）。吸附会改动共享播放器，所以记下原值：
+  /// 用户没动过倍速就退出还原，别让「进一趟听视频」把 1.25x 永久改成 1.5x。
+  double? _entryRate;
+  bool _speedTouched = false;
+
+  /// 退出中（pop-once 守卫）：[_exit] 里有 await，快速连按返回会在 await
+  /// 窗口内重入两次 `pop()`，把下层播放页一起弹掉（体检报告 §3-34）。
+  bool _exiting = false;
+
+  /// 封面请求代数 + 在途目标：切歌后丢弃过期结果（跨曲竞态，见 [_loadCover]）。
+  int _coverSession = 0;
+  String? _coverInFlight;
+
+  /// 当前播放列表（同目录过滤，与播放页播放列表面板一致；为空回退全表）
+  late List<VideoFile> _videos;
+  int _currentIndex = 0;
+
+  /// 随机播放（本页局部状态，退出不持久化）
+  bool _shuffle = false;
+
+  /// 循环模式：**复用播放页的全局设置**（[PlayerControlsSettings.loopMode]，
+  /// shared_preferences 持久化）——「单曲循环 / 列表循环」与播放页「循环播放」
+  /// 面板是同一个值：退出听视频、重启 App 都保留；反过来在播放页改了循环，
+  /// 进听视频也是这个值。
+  LoopMode get _loopMode => PlayerControlsSettings.instance.loopMode;
+
+  // ── 定时关闭（工作.md 阶段1 第 2 点）────────────────────
+
+  /// 当前定时关闭预设（默认关闭）
+  AudioSleepPreset _sleepPreset = AudioSleepPreset.off;
+
+  /// 倒计时剩余时长（仅定时预设激活时非 null）。
+  ///
+  /// 用 ValueNotifier 而不是普通字段：倍速/定时面板打开期间也要每秒刷新
+  /// 「剩余 xx:xx」，面板订阅这个 notifier 才能跟着跳（体检报告 §4 听视频）。
+  final ValueNotifier<Duration?> _sleepRemaining = ValueNotifier(null);
+
+  /// 倒计时定时器（每秒递减 [_sleepRemaining]）
+  Timer? _sleepTimer;
+
+  /// 「播完当前曲目」标志：到 EOF 时暂停且不切下一首
+  bool _sleepPauseAtTrackEnd = false;
+
+  /// 切歌防重入（open 期间旧文件可能触发 completed）
+  bool _isSwitching = false;
+
+  /// 封面帧（居中封面 + 背景高斯模糊共用，RGBA 直通）
+  FastThumbFrame? _coverFrame;
+
+  final List<StreamSubscription<dynamic>> _subs = [];
+
+  bool get _hasNext {
+    if (_videos.isEmpty) return false;
+    return _currentIndex < _videos.length - 1 ||
+        _loopMode == LoopMode.loopAll;
+  }
+
+  bool get _hasPrevious =>
+      _currentIndex > 0 || _loopMode == LoopMode.loopAll;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = widget.player;
+    _path = widget.initialPath;
+    _title = widget.initialTitle;
+    _networkSource = widget.networkSource;
+
+    // 从共享播放器当前状态初始化（迟订阅不重放当前值）
+    _positionNotifier.value = _player.state.position;
+    _durationNotifier.value = _player.state.duration;
+    _playing = _player.state.playing;
+    // 本界面倍速档位 0.5–4.0、步进 0.5：把播放器当前倍速吸附到最近档位，
+    // 保证本界面内显示与实测一致（超出范围时收敛进范围）。原值记在
+    // [_entryRate]，用户没改过倍速的话退出时还原（吸附不该成为持久副作用）。
+    final rate = _player.state.rate;
+    _entryRate = rate;
+    _speed = _speedOptions().reduce(
+      (a, b) => (a - rate).abs() < (b - rate).abs() ? a : b,
+    );
+    _player.setRate(_speed);
+
+    // 播放列表：同目录过滤（与播放页列表面板一致）；为空回退全表。
+    // 网络存储的歌单项身份是**远端路径**（媒体路径是回环 URL），
+    // 当前项也按它定位，否则下标恒为 -1、歌单从第一首错位。
+    final folder = folderOfPath(_playlistKey);
+    final filtered = filterVideosInFolder(widget.playlist ?? const [], folder);
+    _videos = filtered.isEmpty ? (widget.playlist ?? const []) : filtered;
+    // 空表时 indexWhere 返回 -1，`(-1).clamp(0, -1)` 因 lowerLimit > upperLimit
+    // 抛 ArgumentError → initState 直接崩（任一不传 playlist 的入口都必崩）；
+    // 空表用 0 占位，切歌入口本身已有 isEmpty 守卫（体检报告 P0-4）。
+    final index = _videos.indexWhere((v) => v.path == _playlistKey);
+    _currentIndex = _videos.isEmpty ? 0 : index.clamp(0, _videos.length - 1);
+
+    // 竖屏 + 沉浸式全屏（状态栏/导航栏隐藏）
+    PlayerOrientation.apply([DeviceOrientation.portraitUp]);
+    _enterFullscreen();
+
+    _loadCover();
+
+    // 后台播放（工作.md 阶段1 第 2 点）：启动前台服务保活进程，
+    // 使音频在退到后台后像音乐播放器一样继续播放；退出本页时停止。
+    DeviceServices.startBackgroundPlayback(title: _title);
+
+    _subs.add(
+      _player.stream.playing.listen((p) {
+        if (mounted) setState(() => _playing = p);
+      }),
+    );
+    _subs.add(
+      _player.stream.position.listen((p) {
+        if (mounted) _positionNotifier.value = p;
+      }),
+    );
+    _subs.add(
+      _player.stream.duration.listen((d) {
+        if (!mounted) return;
+        _durationNotifier.value = d;
+        // 切歌时封面请求会早于时长流到达（[_switchTo] 刚把时长置 0）→ 那时
+        // [_loadCover] 只能放弃；时长一到就补取一次，避免封面停在首帧。
+        if (d > Duration.zero && _coverFrame == null) _loadCover();
+      }),
+    );
+    // 播放完成：本页处理（切歌/随机/列表循环/停止）
+    _subs.add(
+      _player.stream.completed.listen((completed) {
+        if (completed) _onCompleted();
+      }),
+    );
+    // 循环模式读的是全局播放设置（[PlayerControlsSettings.loopMode]）：
+    // 「上一集/下一集」的可用态由它决定，设置一变就重建
+    PlayerControlsSettings.instance.addListener(_onPlaybackSettingsChanged);
+  }
+
+  /// 全局播放设置变化（本页只用到循环模式）：重建以刷新按钮可用态。
+  void _onPlaybackSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 进入沉浸式全屏
+  void _enterFullscreen() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+  }
+
+  /// 取当前视频封面（居中显示 + 背景模糊共用）。
+  ///
+  /// 位置取「时长一半」的帧，所以两个跨曲陷阱都要防：
+  /// ①切歌瞬间 [_durationNotifier] 刚被置 0 → 取到的是首帧；此时**先不取**，
+  /// 等 duration 流把时长送回来再补（见 initState 的 duration 订阅）；
+  /// ②上一首的取帧是异步的，可能在新歌之后才返回并覆盖新封面 → 用代数号
+  /// 丢弃过期结果；同一首在途也不重复取帧。
+  Future<void> _loadCover() async {
+    final path = _path;
+    final duration = _durationNotifier.value;
+    if (duration <= Duration.zero) return; // ①时长未知：等时长流到达后补取
+    if (_coverInFlight == path) return; // 同一首已在取帧
+    _coverInFlight = path;
+    final session = ++_coverSession;
+    try {
+      final frame = await DeviceServices.getVideoFrameAt(
+        path,
+        duration.inMilliseconds ~/ 2,
+        maxWidth: 480,
+      );
+      // ②过期结果（已切歌 / 已退出）直接丢弃
+      if (!mounted || session != _coverSession || path != _path) return;
+      if (frame == null) return;
+      setState(() => _coverFrame = frame);
+    } finally {
+      if (_coverInFlight == path) _coverInFlight = null;
+    }
+  }
+
+  /// 保存当前视频进度（切歌前 / 退出时调用，保证「视频进度还在」）
+  Future<void> _saveProgress() async {
+    final pos = _positionNotifier.value;
+    final dur = _durationNotifier.value;
+    if (pos.inMilliseconds > 0 && dur.inMilliseconds > 0 && pos < dur) {
+      await PlaybackProgressService.instance.save(
+        _path,
+        pos,
+        forcePersist: true,
+      );
+    }
+  }
+
+  /// 切歌统一入口：保存旧进度 → 调参 → open → 倍速/超分 → 复位状态。
+  /// **不恢复上次进度**：新歌从 0 开始（听歌语义，工作.md 第 10 点）。
+  ///
+  /// 网络存储的歌单项没有可直接 open 的路径（[VideoFile.path] 是远端路径，
+  /// 回环流的注册/释放归播放页）→ 交给 [AudioPlayerPage.onNetworkVideoSelected]
+  /// 执行，本页只同步自身状态。
+  Future<void> _switchTo(int index) async {
+    if (index < 0 || index >= _videos.length) return;
+    final video = _videos[index];
+    if (video.path == _playlistKey) return; // 同一首：不动作
+    if (video.source == VideoSource.network) {
+      await _switchToNetwork(index, video);
+      return;
+    }
+    _isSwitching = true;
+    await _saveProgress();
+    // mpv 缓存/网络调参必须在 open **之前**写入（§4.26）：听视频里
+    // 本地↔在线切换时，解封装缓存与重连参数只在打开文件时生效，
+    // 漏了这一步就会沿用上一首的档位参数。
+    await applyPlaybackTuning(_player, video.path);
+    try {
+      await _player.open(Media(video.path));
+    } on AssertionError {
+      // 播放器已被销毁（播放页已退出）：静默返回
+      return;
+    } finally {
+      _isSwitching = false;
+    }
+    if (!mounted) return;
+    _player.setRate(_speed);
+    try {
+      // 切歌后重放着色器（mpv 打开新文件时着色器链需重新确认）
+      await SuperResolutionService.instance.apply(_player);
+    } catch (_) {
+      // 忽略：超分失败不影响播放
+    }
+    if (mounted) {
+      setState(() {
+        _path = video.path;
+        _title = video.name;
+        _currentIndex = index;
+        _positionNotifier.value = Duration.zero;
+        _durationNotifier.value = Duration.zero;
+        _dragPosition = null;
+        _coverFrame = null;
+      });
+    }
+    widget.onVideoChanged?.call(video.path, video.name);
+    // 后台播放：刷新前台服务通知标题为新曲目（服务已在运行，重复启动仅更新）
+    DeviceServices.startBackgroundPlayback(title: video.name);
+    _loadCover();
+  }
+
+  /// 网络歌单切歌：由播放页注册新流并开流（[_switchTo] 的本地参数写入、
+  /// 进度保存、倍速/超分都由播放页那条统一切集路径完成），本页同步自身的
+  /// 路径/标题/下标与封面，并重放本页的倍速档位（听视频页的倍速是页内状态）。
+  Future<void> _switchToNetwork(int index, VideoFile video) async {
+    final select = widget.onNetworkVideoSelected;
+    if (select == null) return;
+    _isSwitching = true;
+    try {
+      await _saveProgress();
+      final result = await select(video);
+      if (!mounted || result == null) return;
+      _player.setRate(_speed);
+      setState(() {
+        _path = result.path;
+        _title = result.title;
+        _currentIndex = index;
+        // 来源随新媒体更新（下一次切歌 / 歌单定位都按它工作）
+        _networkSource = video;
+        _positionNotifier.value = Duration.zero;
+        _durationNotifier.value = Duration.zero;
+        _dragPosition = null;
+        _coverFrame = null;
+      });
+      // 后台播放：刷新前台服务通知标题为新曲目（服务已在运行，重复启动仅更新）
+      DeviceServices.startBackgroundPlayback(title: video.name);
+      _loadCover();
+    } finally {
+      _isSwitching = false;
+    }
+  }
+
+  /// 下一首：随机模式用时间刻算法；单曲循环回到当前；否则顺序（列表循环回绕）
+  void _next() {
+    if (_videos.isEmpty) return;
+    if (_loopMode == LoopMode.repeatOne) {
+      // 单曲循环：回到当前曲目开头重播
+      unawaited(_replayCurrentTrack());
+      return;
+    }
+    if (_shuffle) {
+      final next = audioShuffleNextIndex(
+        listLength: _videos.length,
+        currentIndex: _currentIndex,
+        now: DateTime.now(),
+      );
+      _switchTo(next);
+      return;
+    }
+    if (_currentIndex < _videos.length - 1) {
+      _switchTo(_currentIndex + 1);
+    } else if (_loopMode == LoopMode.loopAll) {
+      _switchTo(0);
+    }
+  }
+
+  /// 上一首：随机模式用时间刻算法；单曲循环回到当前；否则顺序（列表循环回绕）
+  void _previous() {
+    if (_videos.isEmpty) return;
+    if (_loopMode == LoopMode.repeatOne) {
+      unawaited(_replayCurrentTrack());
+      return;
+    }
+    if (_shuffle) {
+      final next = audioShuffleNextIndex(
+        listLength: _videos.length,
+        currentIndex: _currentIndex,
+        now: DateTime.now(),
+      );
+      _switchTo(next);
+      return;
+    }
+    if (_currentIndex > 0) {
+      _switchTo(_currentIndex - 1);
+    } else if (_loopMode == LoopMode.loopAll) {
+      _switchTo(_videos.length - 1);
+    }
+  }
+
+  /// 播放完成（EOF）：单曲循环重播 → 随机 → 顺序下一首（列表循环回绕）→ 停末尾
+  void _onCompleted() {
+    if (_isSwitching) return;
+    if (!mounted) return;
+    if (_durationNotifier.value <= Duration.zero) return;
+    if (_positionNotifier.value <
+        _durationNotifier.value - const Duration(seconds: 1)) {
+      return;
+    }
+    if (_videos.isEmpty) return;
+    if (_sleepPauseAtTrackEnd) {
+      // 定时关闭「播完当前曲目」：暂停并清除标志，不切下一首（工作.md 阶段1 第 2 点）
+      _sleepPauseAtTrackEnd = false;
+      _sleepPreset = AudioSleepPreset.off;
+      unawaited(_saveProgress());
+      _player.pause();
+      if (mounted) setState(() {});
+      return;
+    }
+    if (_loopMode == LoopMode.repeatOne) {
+      // 单曲循环：回到开头重播（不能只 seek，见 [_replayCurrentTrack]）
+      unawaited(_replayCurrentTrack());
+      return;
+    }
+    if (_shuffle) {
+      final next = audioShuffleNextIndex(
+        listLength: _videos.length,
+        currentIndex: _currentIndex,
+        now: DateTime.now(),
+      );
+      _switchTo(next);
+      return;
+    }
+    if (_currentIndex < _videos.length - 1) {
+      _switchTo(_currentIndex + 1);
+    } else if (_loopMode == LoopMode.loopAll) {
+      _switchTo(0);
+    } else {
+      // 最后一首且不循环：停在末尾
+      unawaited(_saveProgress());
+      _player.seek(_durationNotifier.value);
+      _player.pause();
+    }
+  }
+
+  /// 单曲循环重播：seek 0 **之后必须显式 play**。
+  ///
+  /// mpv 开 `keep-open` 播完时是「先把 pause 置真、再置 eof-reached」，所以
+  /// `completed` 到达时播放器已经停在暂停态；此时只 `seek(0)` 不会解除暂停，
+  /// 也不会再有 `playing=true` 事件——表现就是「进度回到 0 但不起播、中央按钮
+  /// 还停在三角形」。与横屏/竖屏播放页的 `EndOfFileAction.replayCurrent`
+  /// 同一手法（先 seek 再 play）。先 await seek 再 play：保证 `completed` 已被
+  /// 清掉，play 不会再走它内部「completed 则 seek 0 + playlist-pos 0」那条路。
+  Future<void> _replayCurrentTrack() async {
+    try {
+      await _player.seek(Duration.zero);
+      await _player.play();
+    } on AssertionError {
+      // 播放器已被销毁（播放页已退出）：静默返回
+    }
+  }
+
+  Future<void> _togglePlay() async {
+    await _player.playOrPause();
+  }
+
+  void _setSpeed(double v) {
+    _speedTouched = true;
+    setState(() => _speed = v);
+    _player.setRate(v);
+  }
+
+  // ── 定时关闭（工作.md 阶段1 第 2 点）────────────────────
+
+  /// 应用定时关闭预设：
+  /// - off：取消倒计时与「播完当前」标志；
+  /// - min15/30/60 / custom：启动每秒倒计时，归零后暂停播放；
+  ///   custom 用 [custom] 指定时长；
+  /// - trackEnd：到当前曲目 EOF 时暂停（见 [_onCompleted]）。
+  void _applySleepPreset(AudioSleepPreset p, {Duration? custom}) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepRemaining.value = null;
+    _sleepPauseAtTrackEnd = false;
+    _sleepPreset = p;
+    switch (p) {
+      case AudioSleepPreset.off:
+        break;
+      case AudioSleepPreset.trackEnd:
+        _sleepPauseAtTrackEnd = true;
+        break;
+      case AudioSleepPreset.custom:
+        _sleepRemaining.value = custom ?? const Duration(minutes: 15);
+        _startSleepCountdown();
+        break;
+      case AudioSleepPreset.min15:
+      case AudioSleepPreset.min30:
+      case AudioSleepPreset.min60:
+        _sleepRemaining.value = p.duration;
+        _startSleepCountdown();
+        break;
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// 启动每秒倒计时，归零后暂停播放。
+  ///
+  /// 只写 [_sleepRemaining]（ValueNotifier），不再每秒 `setState`：面板订阅了
+  /// 这个 notifier，页面本身不显示剩余时间，整页重建是白做的。
+  void _startSleepCountdown() {
+    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final rem = _sleepRemaining.value;
+      if (rem == null) return;
+      final next = rem - const Duration(seconds: 1);
+      if (next <= Duration.zero) {
+        // 到时：暂停播放并清除定时
+        _sleepTimer?.cancel();
+        _sleepTimer = null;
+        _sleepRemaining.value = null;
+        _sleepPreset = AudioSleepPreset.off;
+        _player.pause();
+      } else {
+        _sleepRemaining.value = next;
+      }
+    });
+  }
+
+  // ── 底部面板（倍速 / 播放列表，胶囊式重设计，工作.md 阶段1 第 2 点）──
+
+  static List<double> _speedOptions() =>
+      [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
+
+  /// 倍速面板：倍速档位胶囊 + 定时关闭预设，右上角关闭按钮
+  void _openSpeedSheet() {
+    showAudioSpeedSheet(
+      context,
+      speed: _speed,
+      options: _speedOptions(),
+      onSpeed: _setSpeed,
+      sleepPreset: _sleepPreset,
+      onSleepPreset: _applySleepPreset,
+      sleepRemaining: _sleepRemaining,
+    );
+  }
+
+  /// 播放列表面板：曲目列表 + 随机/循环胶囊，右上角关闭按钮
+  void _openPlaylistSheet() {
+    showAudioPlaylistSheet(
+      context,
+      videos: _videos,
+      currentIndex: _currentIndex,
+      shuffle: _shuffle,
+      repeatMode: _loopMode,
+      onSelect: _switchTo,
+      onToggleShuffle: () => setState(() => _shuffle = !_shuffle),
+      // 循环写回全局设置（与播放页同一个值）：不 setState，改由
+      // [PlayerControlsSettings] 的通知统一触发重建
+      onRepeatModeChanged: (mode) =>
+          unawaited(PlayerControlsSettings.instance.setLoopMode(mode)),
+    );
+  }
+
+  // ── 退出 ───────────────────────────────────────────────
+
+  Future<void> _exit() async {
+    // pop-once 守卫：`_saveProgress()` 期间再次触发（连按返回 / 返回手势 +
+    // 返回按钮）会再 pop 一次，把下层播放页也弹掉（§3-34）。
+    if (_exiting) return;
+    _exiting = true;
+    await _saveProgress();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    PlayerControlsSettings.instance.removeListener(_onPlaybackSettingsChanged);
+    // 定时关闭定时器清理 + 后台播放前台服务停止（工作.md 阶段1 第 2 点）
+    _sleepTimer?.cancel();
+    DeviceServices.stopBackgroundPlayback();
+    // 进入时把倍速吸附到了本页档位：用户没改过就还原原值（见 [_entryRate]）
+    final entryRate = _entryRate;
+    if (!_speedTouched && entryRate != null && entryRate != _speed) {
+      unawaited(_player.setRate(entryRate));
+    }
+    unawaited(_saveProgress()); // dispose 无法 await，交给后台链完成
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _sleepRemaining.dispose();
+    // 注意：不 dispose 播放器——播放页持有
+    super.dispose();
+  }
+
+  String _fmt(Duration d) => formatDuration(d.inMilliseconds);
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = Theme.of(context).colorScheme.primary;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _exit();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // 背景：封面高斯模糊 + 深色蒙层
+            Positioned.fill(
+              child: _coverFrame == null
+                  ? Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFF1A1A2E), Color(0xFF0F0F1A)],
+                        ),
+                      ),
+                    )
+                  : ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(
+                        sigmaX: 40,
+                        sigmaY: 40,
+                      ),
+                      child: RawThumbImage(
+                        frame: _coverFrame!,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+            ),
+            Positioned.fill(
+              child: Container(color: Colors.black.withValues(alpha: 0.72)),
+            ),
+            // 主内容
+            SafeArea(
+              child: Column(
+                children: [
+                  // 顶栏：返回 + 「听视频」
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white70,
+                            size: 26,
+                          ),
+                          tooltip: AppLocalizations.of(context).commonBack,
+                          onPressed: _exit,
+                        ),
+                        Expanded(
+                          child: Text(
+                            AppLocalizations.of(context).playerActionListen,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // 居中封面 1:1 圆角（缩小：约屏宽 50%、上限 240dp，避免过大）
+                          SizedBox(
+                            width: (MediaQuery.sizeOf(context).width * 0.5)
+                                .clamp(0.0, 240.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: AspectRatio(
+                                aspectRatio: 1,
+                                child: Container(
+                                  color: const Color(0xFF2A2A2A),
+                                  child: _coverFrame == null
+                                      ? const Icon(
+                                          Icons.headphones_outlined,
+                                          color: Colors.white24,
+                                          size: 40,
+                                        )
+                                      : RawThumbImage(
+                                          frame: _coverFrame!,
+                                          fit: BoxFit.cover,
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // 标题
+                          Text(
+                            _title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          // 进度条 + 时间
+                          ListenableBuilder(
+                            listenable: Listenable.merge([
+                              _positionNotifier,
+                              _durationNotifier,
+                            ]),
+                            builder: (context, _) {
+                              final pos = _dragPosition ?? _positionNotifier.value;
+                              final dur = _durationNotifier.value;
+                              final fraction = dur.inMilliseconds > 0
+                                  ? (pos.inMilliseconds / dur.inMilliseconds)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0;
+                              return Column(
+                                children: [
+                                  SliderTheme(
+                                    data: SliderThemeData(
+                                      trackHeight: 2,
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 6,
+                                      ),
+                                      activeTrackColor: accentColor,
+                                      inactiveTrackColor:
+                                          Colors.white.withValues(alpha: 0.15),
+                                      thumbColor: accentColor,
+                                      overlayColor: accentColor.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                    ),
+                                    child: Slider(
+                                      value: fraction,
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _dragPosition = Duration(
+                                            milliseconds:
+                                                (v * dur.inMilliseconds)
+                                                    .round(),
+                                          );
+                                        });
+                                      },
+                                      onChangeEnd: (v) {
+                                        _player.seek(Duration(
+                                          milliseconds:
+                                              (v * dur.inMilliseconds).round(),
+                                        ));
+                                        setState(() => _dragPosition = null);
+                                      },
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _fmt(pos),
+                                          style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        Text(
+                                          _fmt(dur),
+                                          style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          // 底部控制卡：倍速 | 上一集 | 播放/暂停 | 下一集 | 播放列表
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _AudioControlButton(
+                                  icon: Icons.speed_rounded,
+                                  label: '${_speed.toStringAsFixed(1)}x',
+                                  onTap: _openSpeedSheet,
+                                ),
+                                _AudioControlButton(
+                                  icon: Icons.skip_previous_rounded,
+                                  enabled: _hasPrevious,
+                                  onTap: _previous,
+                                ),
+                                // 播放/暂停：与其它四按钮同 52×52 触摸区、同内部结构
+                                //（图标 26 + 14 标签槽），保证五个按钮图标在同一水平线；
+                                // 用 [PlayerPlayPauseButton] 图标形变动画消除生硬切换。
+                                SizedBox(
+                                  width: 52,
+                                  height: _AudioControlButton.height,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: _togglePlay,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        PlayerPlayPauseButton(
+                                          playing: _playing,
+                                          iconSize: 26,
+                                        ),
+                                        const SizedBox(height: 14),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                _AudioControlButton(
+                                  icon: Icons.skip_next_rounded,
+                                  enabled: _hasNext,
+                                  onTap: _next,
+                                ),
+                                _AudioControlButton(
+                                  icon: Icons.queue_music_rounded,
+                                  onTap: _openPlaylistSheet,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 底部控制卡里的小按钮：图标 +（可选）小字标签，48×48 触摸区。
+/// 全部按钮统一 [height]（含标签）；无标签按钮图标垂直居中同一高度
+class _AudioControlButton extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  /// 统一按钮高度（含标签）；无标签按钮图标垂直居中同一高度
+  static const double height = 52;
+
+  const _AudioControlButton({
+    required this.icon,
+    this.label,
+    this.enabled = true,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      height: height,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: enabled ? onTap : null,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 26,
+              color: Colors.white.withValues(alpha: enabled ? 1 : 0.3),
+            ),
+            // 标签行固定占位：无标签按钮也保留相同高度，保证五按钮平行
+            SizedBox(
+              height: 14,
+              child: label == null || !enabled
+                  ? null
+                  : Text(
+                      label!,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 10,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
