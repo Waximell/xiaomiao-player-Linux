@@ -4,7 +4,7 @@ Section: video
 Priority: optional
 Architecture: amd64
 Maintainer: Waximell <noreply@example.com>
-Depends: libgtk-3-0, libglib2.0-0, libepoxy0, libmpv1 | libmpv2, libsecret-1-0, libstdc++6, libx11-6, libwayland-client0
+Depends: libgtk-3-0, libglib2.0-0, libepoxy0, libmpv1 | libmpv2, libsecret-1-0, libjsoncpp25 | libjsoncpp24, libasound2t64 | libasound2, libstdc++6, libx11-6, libwayland-client0
 Recommends: intel-media-va-driver, vainfo, ca-certificates
 Homepage: https://github.com/Waximell/xiaomiao-player-Linux
 Description: 小喵 Player (Linux x64, 精简移植)
