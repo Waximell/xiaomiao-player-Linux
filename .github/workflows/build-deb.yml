@@ -111,10 +111,16 @@ jobs:
       # Atom x7-Z8700（Airmont），若构建机工具链默认抬到 v3，产物一跑就 SIGILL。
       # 这些是 C/C++/CMake 侧（runner、插件）的兜底；Flutter 引擎与 Dart AOT
       # 用的是官方预编译产物，不受这里影响。
+      #
+      # -Wno-error / -Wno-deprecated-literal-operator：26.04 的 clang 会对
+      # flutter_secure_storage_linux 自带的 json.hpp 里 `operator "" _json` 报
+      # -Wdeprecated-literal-operator，而插件自己带 -Werror，直接变成编译错误。
+      # 那份头文件不是我们的代码，改不了（在 pub cache 里），只能把这类第三方
+      # 告警降级——我们自己的代码告警仍会打印在日志里，只是不再阻断构建。
       - name: 构建
         env:
           CFLAGS: "-O2 -march=x86-64-v2 -mtune=generic"
-          CXXFLAGS: "-O2 -march=x86-64-v2 -mtune=generic"
+          CXXFLAGS: "-O2 -march=x86-64-v2 -mtune=generic -Wno-error -Wno-deprecated-literal-operator"
         run: |
           uname -a
           gcc --version | head -1
