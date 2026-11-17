@@ -154,4 +154,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER=$(grep '^version:' pubspec.yaml | head -1 | sed 's/.*version: *//; s/+.*//')
-          gh release create "v${VER}-linux6" ./*.deb             --title "xiaomiao-player ${VER} (Linux x64)"             --notes "基于 commit ${{ github.sha }} 构建。GPL-3.0，完整对应源码见本仓库该 commit 及 LICENSE / THIRD_PARTY_NOTICES.md。"
+          gh release create "v${VER}-linux6" ./*.deb \
+            --title "xiaomiao-player ${VER} (Linux x64)" \
+            --notes-file packaging/RELEASE_NOTES.md
