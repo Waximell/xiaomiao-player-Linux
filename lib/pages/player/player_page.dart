@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -615,10 +616,18 @@ class _PlayerPageState extends State<PlayerPage>
     // 解码档位注入（方案 A）：创建时传入 hwdec/vo，换档后下次打开视频生效
     final decodeSettings = DecodeSettings.instance;
     final decodeMode = decodeSettings.mode;
+    // 视频输出后端：Android 靠 media_kit 把 Surface 句柄（wid）交给 mpv，所以
+    // `vo=gpu` 能被嵌进 Flutter 的 surface；Linux 上 media_kit 走 libmpv 的
+    // render API 渲染进 Flutter 纹理，**只有 `vo=libmpv` 才嵌入**。给 Linux 传
+    // `gpu` 时 mpv 会自己另开一个顶层窗口（播放时多出一个 mpv 窗口，App 里的
+    // 画面是空的）。gpu-next/Vulkan 另说：Linux 上已恒为 false。
+    final String voMode = Platform.isLinux
+        ? 'libmpv'
+        : (decodeSettings.gpuNext ? 'gpu-next' : 'gpu');
     _controller = VideoController(
       _player,
       configuration: VideoControllerConfiguration(
-        vo: decodeSettings.gpuNext ? 'gpu-next' : 'gpu',
+        vo: voMode,
         enableHardwareAcceleration: decodeMode != DecodeMode.sw,
         hwdec: decodeMode.hwdec,
       ),
