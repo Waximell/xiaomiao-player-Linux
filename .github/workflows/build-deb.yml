@@ -27,6 +27,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 上游把 lib/services/dandan_play_keys.dart 加进 .gitignore（含私有 AppSecret），
+      # 仓库里没有这个文件，CI 冷启动必然编译失败。这里按 Secrets 生成：
+      # 配了 DANDAN_APP_ID / DANDAN_APP_SECRET 就能用弹弹play 弹幕；
+      # 没配则留空，只影响该功能，不影响构建与其余播放能力。
+      - name: 生成弹弹play 密钥文件
+        env:
+          DANDAN_APP_ID: ${{ secrets.DANDAN_APP_ID }}
+          DANDAN_APP_SECRET: ${{ secrets.DANDAN_APP_SECRET }}
+        run: |
+          if [ -f lib/services/dandan_play_keys.dart ]; then
+            echo "文件已存在，跳过生成"
+            exit 0
+          fi
+          cat > lib/services/dandan_play_keys.dart <<'EOF'
+          /// CI 生成：真实密钥由仓库 Secrets 注入，不入库。
+          const String kDandanPlayAppId = '__APP_ID__';
+          const String kDandanPlayAppSecret = '__APP_SECRET__';
+          EOF
+          python3 - "$DANDAN_APP_ID" "$DANDAN_APP_SECRET" <<'PY'
+          import sys, pathlib
+          p = pathlib.Path('lib/services/dandan_play_keys.dart')
+          s = p.read_text()
+          s = s.replace('__APP_ID__', sys.argv[1]).replace('__APP_SECRET__', sys.argv[2])
+          p.write_text(s)
+          PY
+          echo "已生成，appId 长度=${#DANDAN_APP_ID}"
+
       # 按用户要求「Flutter 版本跟上游」：用 stable，不硬 pin。
       # 若某次新版 Flutter 引入 Linux/Wayland 回归，临时加 flutter-version: 锁定，
       # 或先跑 tools/disable-impeller.sh。

@@ -84,6 +84,15 @@ dependencies:
   # 与命令，按 `OPTS UTF8 ON` 的应答选编码（纯 Dart，无原生依赖）。
   charset: ^2.0.1
 
+# 本地 fork 的 media_kit：Dart 源码按 fork 的 API 编写（例如 PlayerConfiguration
+# 的 libassAndroidFontsDir / libassAndroidFontName），用上游 pub 版本会在编译期
+# 报 `No named parameter`。补丁清单见 third_party/media_kit/FORK.md。
+# 注意：只覆盖 media_kit；Linux 原生内核仍用 pub 上的 media_kit_libs_linux，
+# 不拉 Android 的 libmpv。
+dependency_overrides:
+  media_kit:
+    path: third_party/media_kit
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
