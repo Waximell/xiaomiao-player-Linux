@@ -6,6 +6,11 @@ Comment=Linux 移植版播放器 (VA-API 硬解)
 Exec=/usr/bin/xiaomiao-player %f
 Icon=xiaomiao-player
 Terminal=false
+# GTK 程序在 X11/Wayland 上报的 WM_CLASS 默认取可执行文件名，这里是 moumou；
+# 而 .desktop 叫 xiaomiao-player.desktop。两者对不上，GNOME 的 dock/任务栏就
+# 认不出这个窗口属于谁，于是显示通用占位图标（从"应用程序"里点开却正常，
+# 因为那条路不需要匹配）。显式声明后就能把窗口和这个桌面项绑定起来。
+StartupWMClass=moumou
 Categories=AudioVideo;Video;Player;
 MimeType=video/mp4;video/x-matroska;video/x-msvideo;video/webm;video/mpeg;video/quicktime;
 StartupNotify=true
