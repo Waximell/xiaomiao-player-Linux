@@ -8,7 +8,7 @@ BIN="$BUNDLE/moumou"
 [ -f "$BIN" ] || { echo "✗ 找不到 $BIN，先跑 flutter build linux --release"; exit 1; }
 
 VER=$(grep '^version:' pubspec.yaml | head -1 | sed 's/.*version: *//; s/+.*//; s/[[:space:]]*$//')
-REV="${VER}-linux3"
+REV="${VER}-linux4"
 PKG="xiaomiao-player_${REV}_amd64"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
