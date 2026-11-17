@@ -55,6 +55,7 @@ String preferredDecodeChain(
   DecodeMode mode, {
   required bool usesVulkan,
   bool buildSupportsMediaCodecVulkan = kBuildSupportsMediaCodecVulkan,
+  bool supportsDirectInterop = true,
 }) {
   switch (mode) {
     case DecodeMode.autoSafe:
@@ -63,6 +64,13 @@ String preferredDecodeChain(
     case DecodeMode.hwCopy:
       return kHwdecChainCopyFirst;
     case DecodeMode.hwPlus:
+      // 直通帧是 GPU 显存里的 DMA-BUF，要正确的 GL/Vulkan interop 才能上屏。
+      // Linux 走的是 `vo=libmpv`（render API），没有这条路径——实测直通时
+      // 整个画面偏蓝（2026-11，Surface 3 / Mesa i965）。所以 Linux 一律
+      // 跳过直通、直接拷贝，宁可多一次拷贝也不出蓝画面。
+      if (!supportsDirectInterop) {
+        return kHwdecChainCopyFirst;
+      }
       return canUseDirectMediaCodec(
         usesVulkan: usesVulkan,
         buildSupportsMediaCodecVulkan: buildSupportsMediaCodecVulkan,

@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Maintainer: Waximell <noreply@example.com>
 Depends: libgtk-3-0, libglib2.0-0, libepoxy0, libmpv1 | libmpv2, libsecret-1-0, libasound2t64 | libasound2, libstdc++6, libx11-6, libwayland-client0
-Recommends: intel-media-va-driver, vainfo, ca-certificates
+Recommends: i965-va-driver, intel-media-va-driver, vainfo, ca-certificates
 Homepage: https://github.com/Waximell/xiaomiao-player-Linux
 Description: 小喵 Player (Linux x64, 精简移植)
  基于 media_kit 与系统 libmpv 的 Flutter 播放器 Linux 移植。

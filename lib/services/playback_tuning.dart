@@ -10,6 +10,8 @@
 /// （历史 bug：`gpu-api=vulkan` 落在 open 之后 → 播放中途重配视频输出）。
 library;
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:moumou/services/decode_settings.dart';
@@ -46,6 +48,9 @@ Future<void> applyPlaybackTuning(Player player, String path) async {
     hwdecChain: preferredDecodeChain(
       decode.mode,
       usesVulkan: decode.gpuNext && decode.useVulkan,
+      // Linux（vo=libmpv）没有直通帧的 interop 路径，直通会出蓝屏，
+      // 所以本平台跳过直通，直接 vaapi-copy。
+      supportsDirectInterop: !Platform.isLinux,
     ),
   );
 
