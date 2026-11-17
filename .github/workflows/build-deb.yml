@@ -22,11 +22,13 @@ permissions:
 
 jobs:
   build:
-    # 目标机是 Ubuntu 26.04（Surface 3），构建机就用 26.04：
-    # 依赖的 soname（如 libjsoncpp.so.26）、glibc 与目标机完全一致，
-    # 不会出现「22.04 上编出 .so.25、目标机只有 .so.26」这类硬伤。
-    # 代价：产物只能装在 26.04+（glibc 2.4x），这是与目标机一致的预期。
-    runs-on: ubuntu-26.04
+    # 构建机 = 24.04 LTS：工具链的指令集基线仍是 x86-64（v1）。
+    # 26.04 的基线已抬到 x86-64-v3（要 AVX2），而目标机 Surface 3 的
+    # Atom x7-Z8700 没有 AVX —— 在 26.04 上编出来的程序一启动就被 glibc
+    # 拦下："CPU ISA level is lower than required"。所以退回 24.04。
+    # 代价：链接的是 libjsoncpp.so.25（26.04 只有 .26），因此 build-deb.sh
+    # 会把该 .so 一并打进 deb，运行时由 wrapper 的 LD_LIBRARY_PATH 命中。
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -107,16 +109,15 @@ jobs:
         continue-on-error: true
         run: flutter analyze --no-pub || true
 
-      # 指令集锁在 x86-64-v2（SSE4.2/POPCNT，不含 AVX）：目标机 Surface 3 是
-      # Atom x7-Z8700（Airmont），若构建机工具链默认抬到 v3，产物一跑就 SIGILL。
-      # 这些是 C/C++/CMake 侧（runner、插件）的兜底；Flutter 引擎与 Dart AOT
-      # 用的是官方预编译产物，不受这里影响。
+      # 指令集显式钉在 x86-64-v2（SSE4.2/POPCNT，不含 AVX）：目标机 Surface 3 是
+      # Atom x7-Z8700（Airmont），无 AVX。24.04 的默认基线本来就是 x86-64，这里
+      # 只是加一道保险，防某个依赖或镜像变更悄悄抬高基线。
+      # （26.04 上就是栽在这：默认基线 v3，程序一启动被 glibc 拦下。）
       #
-      # -Wno-error / -Wno-deprecated-literal-operator：26.04 的 clang 会对
-      # flutter_secure_storage_linux 自带的 json.hpp 里 `operator "" _json` 报
-      # -Wdeprecated-literal-operator，而插件自己带 -Werror，直接变成编译错误。
-      # 那份头文件不是我们的代码，改不了（在 pub cache 里），只能把这类第三方
-      # 告警降级——我们自己的代码告警仍会打印在日志里，只是不再阻断构建。
+      # -Wno-error / -Wno-deprecated-literal-operator：flutter_secure_storage_linux
+      # 自带的 json.hpp 里 `operator "" _json` 会被较新 clang 报
+      # -Wdeprecated-literal-operator，插件又带 -Werror，于是编译中断。那份头文件
+      # 在 pub cache 里改不了，只能把这类第三方告警降级（我们自己的告警仍会打印）。
       - name: 构建
         env:
           CFLAGS: "-O2 -march=x86-64-v2 -mtune=generic"
@@ -133,6 +134,8 @@ jobs:
             echo "✗ 有未解析的动态库，检查 control 的 Depends"; exit 1
           fi
           echo "✓ 动态库齐全"
+          # 顺手记录可执行文件的指令集属性要求（有则打印，没有就说明基线很老很安全）
+          readelf -n build/linux/x64/release/bundle/moumou | grep -i "ISA level" || echo "（无 ISA level 属性注记，即未要求高于 x86-64）"
 
       - name: 组装 deb
         run: |
@@ -151,4 +154,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER=$(grep '^version:' pubspec.yaml | head -1 | sed 's/.*version: *//; s/+.*//')
-          gh release create "v${VER}-linux2" ./*.deb             --title "xiaomiao-player ${VER} (Linux x64)"             --notes "基于 commit ${{ github.sha }} 构建。GPL-3.0，完整对应源码见本仓库该 commit 及 LICENSE / THIRD_PARTY_NOTICES.md。"
+          gh release create "v${VER}-linux3" ./*.deb             --title "xiaomiao-player ${VER} (Linux x64)"             --notes "基于 commit ${{ github.sha }} 构建。GPL-3.0，完整对应源码见本仓库该 commit 及 LICENSE / THIRD_PARTY_NOTICES.md。"
