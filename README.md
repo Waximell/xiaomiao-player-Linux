@@ -1,3 +1,6 @@
+# 本仓库尝试向 Linux 移植。 保留 SMB / 哔哩哔哩在线播放、弹幕字幕、手势与横竖屏切换； 移除 Android 原生能力、下载、超分、截图与应用内更新。 硬解链 hwdec=vaapi,vaapi-copy,no 以简化处理难度。
+
+
 # 小喵 Player
 
 <p align="center">
